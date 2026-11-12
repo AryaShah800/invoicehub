@@ -1,5 +1,7 @@
 using InvoiceHub.Api.Auth;
+using InvoiceHub.Api.Errors;
 using InvoiceHub.Api.Tenancy;
+using InvoiceHub.Application;
 using InvoiceHub.Application.Abstractions;
 using InvoiceHub.Application.Auth;
 using InvoiceHub.Infrastructure;
@@ -14,7 +16,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantProvider, ClaimsTenantProvider>();
+builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
 var jwt = JwtOptions.Load(builder.Configuration);
 builder.Services
@@ -71,6 +76,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseExceptionHandler();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
