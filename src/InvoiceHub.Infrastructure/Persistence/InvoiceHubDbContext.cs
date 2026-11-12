@@ -5,13 +5,17 @@ using InvoiceHub.Domain.Customers;
 using InvoiceHub.Domain.Invoices;
 using InvoiceHub.Domain.Products;
 using InvoiceHub.Domain.Tenants;
+using InvoiceHub.Infrastructure.Identity;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace InvoiceHub.Infrastructure.Persistence;
 
 public sealed class InvoiceHubDbContext(
     DbContextOptions<InvoiceHubDbContext> options,
-    ITenantProvider tenantProvider) : DbContext(options)
+    ITenantProvider tenantProvider)
+    : IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>(options)
 {
     /// <summary>The tenant of the current request; null when none is known.</summary>
     public Guid? CurrentTenantId => tenantProvider.TenantId;
@@ -24,6 +28,7 @@ public sealed class InvoiceHubDbContext(
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(InvoiceHubDbContext).Assembly);
         ApplyTenantFilters(modelBuilder);
     }

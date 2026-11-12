@@ -1,5 +1,7 @@
+using InvoiceHub.Infrastructure.Identity;
 using InvoiceHub.Infrastructure.Persistence;
 using InvoiceHub.Infrastructure.Persistence.Interceptors;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +26,18 @@ public static class DependencyInjection
                 .AddInterceptors(
                     sp.GetRequiredService<TenantWriteGuardInterceptor>(),
                     sp.GetRequiredService<AuditInterceptor>()));
+
+        services
+            .AddIdentityCore<ApplicationUser>(options =>
+            {
+                options.User.RequireUniqueEmail = true;
+                options.Password.RequiredLength = 8;
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+                options.Lockout.AllowedForNewUsers = true;
+            })
+            .AddRoles<IdentityRole<Guid>>()
+            .AddEntityFrameworkStores<InvoiceHubDbContext>();
 
         return services;
     }
