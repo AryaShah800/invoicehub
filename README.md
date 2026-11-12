@@ -64,6 +64,17 @@ The default connection string in `src/InvoiceHub.Api/appsettings.json` points at
 
 Tokens carry `sub`, `email`, `tenant_id` and `role` claims. The tenant for every request comes from the `tenant_id` claim, and that is what the EF Core query filters use. Every endpoint requires a signed-in tenant user unless it is marked `[AllowAnonymous]`. In Swagger, use Authorize and paste the token from `/api/auth/login`.
 
+## Customers and products
+
+| Endpoint | Access | Purpose |
+|---|---|---|
+| `POST /api/customers` | any tenant user | Add a buyer. The state code decides the place of supply; a GSTIN, if given, must match the state |
+| `GET /api/customers/{id}` | any tenant user | Another tenant's customer is a 404 |
+| `POST /api/products` | Admin only | Add a catalogue item with its HSN/SAC code, unit price and GST slab |
+| `GET /api/products/{id}` | any tenant user | Another tenant's product is a 404 |
+
+There are no list, update or delete endpoints yet.
+
 ## Invoices
 
 | Endpoint | Purpose |
