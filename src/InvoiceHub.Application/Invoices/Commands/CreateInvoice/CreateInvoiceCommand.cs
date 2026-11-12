@@ -3,6 +3,7 @@ using InvoiceHub.Application.Common;
 using InvoiceHub.Domain.Customers;
 using InvoiceHub.Domain.Invoices;
 using InvoiceHub.Domain.Products;
+using InvoiceHub.Domain.Tenants;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,6 +38,13 @@ public sealed class CreateInvoiceCommandHandler(IApplicationDbContext db, ITenan
             ?? throw new InvalidOperationException("Creating an invoice requires a current tenant.");
 
         // Both lookups go through the tenant query filter, so another tenant's customer or product is NotFound.
+        // Tenant is not a tenant-owned row, so look it up by the caller's own id.
+        var sellerStateCode = await db.Tenants
+            .Where(t => t.Id == tenantId)
+            .Select(t => t.StateCode)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException(nameof(Tenant), tenantId);
+
         var customer = await db.Customers.FirstOrDefaultAsync(c => c.Id == request.CustomerId, cancellationToken)
             ?? throw new NotFoundException(nameof(Customer), request.CustomerId);
 
@@ -52,7 +60,7 @@ public sealed class CreateInvoiceCommandHandler(IApplicationDbContext db, ITenan
         if (await db.Invoices.AnyAsync(i => i.InvoiceNumber == invoiceNumber, cancellationToken))
             throw new ConflictException($"Invoice number '{invoiceNumber}' is already used.");
 
-        var invoice = new Invoice(tenantId, customer, invoiceNumber, request.IssueDate, request.DueDate);
+        var invoice = new Invoice(tenantId, sellerStateCode, customer, invoiceNumber, request.IssueDate, request.DueDate);
         invoice.SetNotes(request.Notes);
 
         foreach (var line in request.Lines)

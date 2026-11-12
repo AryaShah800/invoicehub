@@ -115,7 +115,7 @@ public sealed class TenantIsolationTests : IDisposable
         var customer = new Customer(tenant.Id, customerName, $"{tenant.StateCode}@example.com", tenant.StateCode,
             new Address("1 Main Road", null, "Town", "380001"), gstin: null);
         var product = new Product(tenant.Id, productName, "9983", 1000m, 18m);
-        var invoice = new Invoice(tenant.Id, customer, invoiceNumber,
+        var invoice = new Invoice(tenant.Id, tenant.StateCode, customer, invoiceNumber,
             new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 30));
         invoice.AddLine(product, 2);
 

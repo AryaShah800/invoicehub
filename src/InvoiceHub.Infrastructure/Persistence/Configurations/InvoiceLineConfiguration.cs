@@ -20,6 +20,10 @@ internal sealed class InvoiceLineConfiguration : IEntityTypeConfiguration<Invoic
         builder.Property(l => l.UnitPrice).HasPrecision(18, 2);
         builder.Property(l => l.GstRate).HasPrecision(5, 2);
         builder.Property(l => l.TaxableValue).HasPrecision(18, 2);
+        builder.Property(l => l.CgstAmount).HasPrecision(18, 2);
+        builder.Property(l => l.SgstAmount).HasPrecision(18, 2);
+        builder.Property(l => l.IgstAmount).HasPrecision(18, 2);
+        builder.Ignore(l => l.TaxAmount);
 
         builder.HasOne<Tenant>()
             .WithMany()

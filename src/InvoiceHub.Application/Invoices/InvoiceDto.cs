@@ -11,7 +11,10 @@ public sealed record InvoiceLineDto(
     decimal Quantity,
     decimal UnitPrice,
     decimal GstRate,
-    decimal TaxableValue);
+    decimal TaxableValue,
+    decimal CgstAmount,
+    decimal SgstAmount,
+    decimal IgstAmount);
 
 public sealed record InvoiceDto(
     Guid Id,
@@ -21,10 +24,17 @@ public sealed record InvoiceDto(
     DateOnly DueDate,
     Guid CustomerId,
     string CustomerName,
+    string SellerStateCode,
     string PlaceOfSupplyStateCode,
+    bool IsIntraState,
     string? Notes,
     IReadOnlyList<InvoiceLineDto> Lines,
-    decimal TaxableTotal);
+    decimal TaxableTotal,
+    decimal CgstTotal,
+    decimal SgstTotal,
+    decimal IgstTotal,
+    decimal TaxTotal,
+    decimal GrandTotal);
 
 internal static class InvoiceMapping
 {
@@ -36,13 +46,21 @@ internal static class InvoiceMapping
         invoice.DueDate,
         invoice.CustomerId,
         customerName,
+        invoice.SellerStateCode,
         invoice.PlaceOfSupplyStateCode,
+        invoice.IsIntraState,
         invoice.Notes,
         invoice.Lines
             .OrderBy(l => l.LineNumber)
             .Select(l => new InvoiceLineDto(
                 l.Id, l.LineNumber, l.ProductId, l.Description, l.HsnCode,
-                l.Quantity, l.UnitPrice, l.GstRate, l.TaxableValue))
+                l.Quantity, l.UnitPrice, l.GstRate, l.TaxableValue,
+                l.CgstAmount, l.SgstAmount, l.IgstAmount))
             .ToList(),
-        invoice.TaxableTotal);
+        invoice.TaxableTotal,
+        invoice.CgstTotal,
+        invoice.SgstTotal,
+        invoice.IgstTotal,
+        invoice.TaxTotal,
+        invoice.GrandTotal);
 }

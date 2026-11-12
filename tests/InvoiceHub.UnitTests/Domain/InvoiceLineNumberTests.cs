@@ -13,7 +13,7 @@ public sealed class InvoiceLineNumberTests
     {
         var customer = new Customer(_tenantId, "Buyer", "buyer@example.test", "27",
             new Address("1 Road", null, "Pune", "411001"));
-        return new Invoice(_tenantId, customer, "INV-1", new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 30));
+        return new Invoice(_tenantId, "27", customer, "INV-1", new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 30));
     }
 
     private Product NewProduct(string name) => new(_tenantId, name, "9983", 100m, 18m);

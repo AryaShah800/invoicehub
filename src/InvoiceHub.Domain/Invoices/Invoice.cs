@@ -17,10 +17,11 @@ public sealed class Invoice : AuditableEntity, ITenantOwned
     private Invoice()
     {
         InvoiceNumber = null!;
+        SellerStateCode = null!;
         PlaceOfSupplyStateCode = null!;
     }
 
-    public Invoice(Guid tenantId, Customer customer, string invoiceNumber, DateOnly issueDate, DateOnly dueDate)
+    public Invoice(Guid tenantId, string sellerStateCode, Customer customer, string invoiceNumber, DateOnly issueDate, DateOnly dueDate)
     {
         TenantId = Guard.NotEmpty(tenantId, "Tenant");
         if (customer is null)
@@ -34,6 +35,7 @@ public sealed class Invoice : AuditableEntity, ITenantOwned
         InvoiceNumber = Guard.NotBlank(invoiceNumber, "Invoice number", NumberMaxLength);
         IssueDate = issueDate;
         DueDate = dueDate;
+        SellerStateCode = GstRules.StateCode(sellerStateCode);
         PlaceOfSupplyStateCode = customer.StateCode;
         Status = InvoiceStatus.Draft;
     }
@@ -44,13 +46,26 @@ public sealed class Invoice : AuditableEntity, ITenantOwned
     public DateOnly IssueDate { get; private set; }
     public DateOnly DueDate { get; private set; }
     public InvoiceStatus Status { get; private set; }
+
+    /// <summary>The seller's state when the invoice was raised, copied so later profile changes do not alter it.</summary>
+    public string SellerStateCode { get; private set; }
+
     public string PlaceOfSupplyStateCode { get; private set; }
+
+    /// <summary>Seller and place of supply are in the same state: CGST + SGST apply. Otherwise IGST.</summary>
+    public bool IsIntraState => SellerStateCode == PlaceOfSupplyStateCode;
+
     public string? Notes { get; private set; }
     public byte[] RowVersion { get; private set; } = [];
 
     public IReadOnlyCollection<InvoiceLine> Lines => _lines.AsReadOnly();
 
     public decimal TaxableTotal => _lines.Sum(l => l.TaxableValue);
+    public decimal CgstTotal => _lines.Sum(l => l.CgstAmount);
+    public decimal SgstTotal => _lines.Sum(l => l.SgstAmount);
+    public decimal IgstTotal => _lines.Sum(l => l.IgstAmount);
+    public decimal TaxTotal => CgstTotal + SgstTotal + IgstTotal;
+    public decimal GrandTotal => TaxableTotal + TaxTotal;
 
     public InvoiceLine AddLine(Product product, decimal quantity)
     {
@@ -107,7 +122,7 @@ public sealed class Invoice : AuditableEntity, ITenantOwned
         decimal quantity, decimal unitPrice, decimal gstRate)
     {
         EnsureDraft();
-        var line = new InvoiceLine(TenantId, Id, _lines.Count + 1, productId, description, hsnCode, quantity, unitPrice, gstRate);
+        var line = new InvoiceLine(TenantId, Id, _lines.Count + 1, productId, description, hsnCode, quantity, unitPrice, gstRate, IsIntraState);
         _lines.Add(line);
         return line;
     }

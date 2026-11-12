@@ -17,7 +17,7 @@ public sealed class InvoiceLine : Entity, ITenantOwned
     }
 
     internal InvoiceLine(Guid tenantId, Guid invoiceId, int lineNumber, Guid? productId, string description, string hsnCode,
-        decimal quantity, decimal unitPrice, decimal gstRate)
+        decimal quantity, decimal unitPrice, decimal gstRate, bool isIntraState)
     {
         TenantId = tenantId;
         InvoiceId = invoiceId;
@@ -29,6 +29,10 @@ public sealed class InvoiceLine : Entity, ITenantOwned
         UnitPrice = Guard.NotNegative(unitPrice, "Unit price");
         GstRate = GstRules.Rate(gstRate);
         TaxableValue = Math.Round(Quantity * UnitPrice, 2, MidpointRounding.AwayFromZero);
+        var tax = GstCalculator.Calculate(TaxableValue, GstRate, isIntraState);
+        CgstAmount = tax.Cgst;
+        SgstAmount = tax.Sgst;
+        IgstAmount = tax.Igst;
     }
 
     public Guid TenantId { get; private set; }
@@ -44,6 +48,11 @@ public sealed class InvoiceLine : Entity, ITenantOwned
     public decimal UnitPrice { get; private set; }
     public decimal GstRate { get; private set; }
     public decimal TaxableValue { get; private set; }
+    public decimal CgstAmount { get; private set; }
+    public decimal SgstAmount { get; private set; }
+    public decimal IgstAmount { get; private set; }
+
+    public decimal TaxAmount => CgstAmount + SgstAmount + IgstAmount;
 
     internal void Renumber(int lineNumber) => LineNumber = lineNumber;
 }
