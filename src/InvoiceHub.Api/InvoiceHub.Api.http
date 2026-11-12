@@ -1,0 +1,3 @@
+@InvoiceHub.Api_HostAddress = http://localhost:5161
+
+GET {{InvoiceHub.Api_HostAddress}}/swagger/index.html

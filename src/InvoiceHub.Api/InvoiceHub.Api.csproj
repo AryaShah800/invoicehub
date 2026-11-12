@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\InvoiceHub.Application\InvoiceHub.Application.csproj" />
+    <ProjectReference Include="..\InvoiceHub.Infrastructure\InvoiceHub.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
