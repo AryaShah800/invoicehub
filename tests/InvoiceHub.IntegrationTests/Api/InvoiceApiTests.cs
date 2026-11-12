@@ -290,4 +290,81 @@ public sealed class InvoiceApiTests(ApiFactory factory)
         Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
     }
+
+    // ---- GST ----
+
+    private async Task<Guid> NewCustomerInStateAsync(Business business, string stateCode)
+    {
+        await using var db = factory.CreateDbContext(business.Auth.TenantId);
+        var customer = new Customer(business.Auth.TenantId, "Out of state Ltd", TestData.NewEmail(), stateCode,
+            new Address("5 Park Street", null, "Bengaluru", "560001"));
+        db.Add(customer);
+        await db.SaveChangesAsync();
+        return customer.Id;
+    }
+
+    [Fact]
+    public async Task A_customer_in_the_sellers_state_gets_CGST_and_SGST()
+    {
+        var business = await NewBusinessAsync(); // seller 27, customer 27
+
+        var invoice = await CreateAsync(business); // 2 x 1000 at 18%
+
+        Assert.True(invoice.IsIntraState);
+        Assert.Equal("27", invoice.SellerStateCode);
+        var line = Assert.Single(invoice.Lines);
+        Assert.Equal((180m, 180m, 0m), (line.CgstAmount, line.SgstAmount, line.IgstAmount));
+        Assert.Equal(2000m, invoice.TaxableTotal);
+        Assert.Equal(360m, invoice.TaxTotal);
+        Assert.Equal(2360m, invoice.GrandTotal);
+    }
+
+    [Fact]
+    public async Task A_customer_in_another_state_gets_IGST_only()
+    {
+        var business = await NewBusinessAsync();
+        var customerId = await NewCustomerInStateAsync(business, "29");
+        var command = NewInvoice(business) with { CustomerId = customerId };
+
+        var invoice = await CreateAsync(business, command);
+
+        Assert.False(invoice.IsIntraState);
+        Assert.Equal("29", invoice.PlaceOfSupplyStateCode);
+        var line = Assert.Single(invoice.Lines);
+        Assert.Equal((0m, 0m, 360m), (line.CgstAmount, line.SgstAmount, line.IgstAmount));
+        Assert.Equal(0m, invoice.CgstTotal);
+        Assert.Equal(360m, invoice.IgstTotal);
+        Assert.Equal(2360m, invoice.GrandTotal);
+    }
+
+    [Fact]
+    public async Task Tax_is_rounded_per_line_and_the_totals_add_up_the_rounded_lines()
+    {
+        var business = await NewBusinessAsync();
+        // Three lines of 3 x 3.35 = 10.05 at 18%: unrounded tax per line is 1.809, 0.9045 per half.
+        // Per line CGST/SGST = 0.90 each. Rounding the grand total instead would give a different answer.
+        var line = new CreateInvoiceLine(null, "Pen", "9608", 3, 3.35m, 18m);
+        var command = NewInvoice(business, lines: [line, line, line]);
+
+        var invoice = await CreateAsync(business, command);
+
+        Assert.All(invoice.Lines, l => Assert.Equal((0.90m, 0.90m), (l.CgstAmount, l.SgstAmount)));
+        Assert.Equal(2.70m, invoice.CgstTotal);
+        Assert.Equal(2.70m, invoice.SgstTotal);
+        Assert.Equal(30.15m + 5.40m, invoice.GrandTotal);
+    }
+
+    [Fact]
+    public async Task Stored_tax_amounts_survive_a_database_round_trip()
+    {
+        var business = await NewBusinessAsync();
+        var created = await CreateAsync(business);
+
+        var response = await _client.GetAsync($"/api/invoices/{created.Id}", business.Auth.AccessToken);
+        var fetched = (await response.Content.ReadFromJsonAsync<InvoiceDto>())!;
+
+        Assert.Equal(created.GrandTotal, fetched.GrandTotal);
+        Assert.Equal(created.Lines[0].CgstAmount, fetched.Lines[0].CgstAmount);
+        Assert.Equal("27", fetched.SellerStateCode);
+    }
 }
