@@ -40,17 +40,9 @@ builder.Services
 
 builder.Services.AddAuthorizationBuilder()
     // Secure by default: every endpoint needs a signed-in tenant user unless it opts out with [AllowAnonymous].
-    .SetFallbackPolicy(new AuthorizationPolicyBuilder()
-        .RequireAuthenticatedUser()
-        .RequireClaim(AppClaims.TenantId)
-        .Build())
-    .AddPolicy(Policies.TenantMember, policy => policy
-        .RequireAuthenticatedUser()
-        .RequireClaim(AppClaims.TenantId))
-    .AddPolicy(Policies.AdminOnly, policy => policy
-        .RequireAuthenticatedUser()
-        .RequireClaim(AppClaims.TenantId)
-        .RequireRole(Roles.Admin));
+    .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireTenant().Build())
+    .AddPolicy(Policies.TenantMember, policy => policy.RequireTenant())
+    .AddPolicy(Policies.AdminOnly, policy => policy.RequireTenant().RequireRole(Roles.Admin));
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
