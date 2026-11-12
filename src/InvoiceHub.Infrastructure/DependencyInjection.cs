@@ -1,8 +1,10 @@
 using InvoiceHub.Application.Abstractions;
 using InvoiceHub.Application.Auth;
+using InvoiceHub.Application.Reports;
 using InvoiceHub.Infrastructure.Identity;
 using InvoiceHub.Infrastructure.Persistence;
 using InvoiceHub.Infrastructure.Persistence.Interceptors;
+using InvoiceHub.Infrastructure.Reports;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -30,6 +32,9 @@ public static class DependencyInjection
                     sp.GetRequiredService<AuditInterceptor>()));
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<InvoiceHubDbContext>());
+
+        services.AddScoped<IGstReportReader, DapperGstReportReader>();
+        services.AddScoped<EfGstReportReader>();
 
         services.AddSingleton(JwtOptions.Load(configuration));
         services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();

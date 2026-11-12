@@ -46,5 +46,7 @@ internal sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
 
         builder.HasIndex(i => new { i.TenantId, i.InvoiceNumber }).IsUnique();
         builder.HasIndex(i => new { i.TenantId, i.Status, i.DueDate });
+        // Serves the GST report: one tenant, a date range, then a status filter without touching the table.
+        builder.HasIndex(i => new { i.TenantId, i.IssueDate }).IncludeProperties(i => i.Status);
     }
 }

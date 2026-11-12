@@ -118,6 +118,10 @@ namespace InvoiceHub.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "InvoiceNumber")
                         .IsUnique();
 
+                    b.HasIndex("TenantId", "IssueDate");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("TenantId", "IssueDate"), new[] { "Status" });
+
                     b.HasIndex("TenantId", "Status", "DueDate");
 
                     b.ToTable("Invoices", (string)null);
