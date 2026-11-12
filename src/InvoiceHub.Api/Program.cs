@@ -15,7 +15,10 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ITenantProvider, ClaimsTenantProvider>();
+// One instance per request serves both: it reads the tenant (ITenantProvider) and lets the webhook set it (ITenantAssigner).
+builder.Services.AddScoped<ClaimsTenantProvider>();
+builder.Services.AddScoped<ITenantProvider>(sp => sp.GetRequiredService<ClaimsTenantProvider>());
+builder.Services.AddScoped<ITenantAssigner>(sp => sp.GetRequiredService<ClaimsTenantProvider>());
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
