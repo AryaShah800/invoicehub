@@ -367,4 +367,58 @@ public sealed class InvoiceApiTests(ApiFactory factory)
         Assert.Equal(created.Lines[0].CgstAmount, fetched.Lines[0].CgstAmount);
         Assert.Equal("27", fetched.SellerStateCode);
     }
+
+    // ---- issue ----
+
+    [Fact]
+    public async Task Issuing_a_draft_invoice_returns_it_as_Issued_with_the_full_balance_due()
+    {
+        var business = await NewBusinessAsync();
+        var draft = await CreateAsync(business);
+
+        var response = await _client.PostAsync($"/api/invoices/{draft.Id}/issue", new { }, business.Auth.AccessToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var issued = (await response.Content.ReadFromJsonAsync<InvoiceDto>())!;
+        Assert.Equal("Issued", issued.Status);
+        Assert.Equal(0m, issued.AmountPaid);
+        Assert.Equal(issued.GrandTotal, issued.BalanceDue);
+
+        var fetched = await _client.GetAsync($"/api/invoices/{draft.Id}", business.Auth.AccessToken);
+        Assert.Equal("Issued", (await fetched.Content.ReadFromJsonAsync<InvoiceDto>())!.Status);
+    }
+
+    [Fact]
+    public async Task Issuing_an_invoice_twice_is_a_business_rule_violation()
+    {
+        var business = await NewBusinessAsync();
+        var draft = await CreateAsync(business);
+        (await _client.PostAsync($"/api/invoices/{draft.Id}/issue", new { }, business.Auth.AccessToken)).EnsureSuccessStatusCode();
+
+        var second = await _client.PostAsync($"/api/invoices/{draft.Id}/issue", new { }, business.Auth.AccessToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, second.StatusCode);
+    }
+
+    [Fact]
+    public async Task Another_tenants_invoice_cannot_be_issued()
+    {
+        var owner = await NewBusinessAsync();
+        var draft = await CreateAsync(owner);
+        var other = await _client.RegisterAsync();
+
+        var response = await _client.PostAsync($"/api/invoices/{draft.Id}/issue", new { }, other.AccessToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var stillDraft = await _client.GetAsync($"/api/invoices/{draft.Id}", owner.Auth.AccessToken);
+        Assert.Equal("Draft", (await stillDraft.Content.ReadFromJsonAsync<InvoiceDto>())!.Status);
+    }
+
+    [Fact]
+    public async Task Issuing_needs_a_token()
+    {
+        var response = await _client.PostAsync($"/api/invoices/{Guid.NewGuid()}/issue", new { });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
 }

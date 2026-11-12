@@ -1,6 +1,7 @@
 using InvoiceHub.Api.Auth;
 using InvoiceHub.Application.Invoices;
 using InvoiceHub.Application.Invoices.Commands.CreateInvoice;
+using InvoiceHub.Application.Invoices.Commands.IssueInvoice;
 using InvoiceHub.Application.Invoices.Queries.GetInvoiceById;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -21,6 +22,12 @@ public sealed class InvoicesController(ISender sender) : ControllerBase
         var invoice = await sender.Send(command, ct);
         return CreatedAtAction(nameof(GetById), new { id = invoice.Id }, invoice);
     }
+
+    /// <summary>Issues a draft invoice. It then cannot be edited and can receive payments.</summary>
+    [HttpPost("{id:guid}/issue")]
+    [ProducesResponseType(typeof(InvoiceDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Issue(Guid id, CancellationToken ct) =>
+        Ok(await sender.Send(new IssueInvoiceCommand(id), ct));
 
     /// <summary>Gets one of the caller's invoices. Another tenant's invoice is a 404.</summary>
     [HttpGet("{id:guid}")]
