@@ -15,7 +15,7 @@ namespace InvoiceHub.Infrastructure.Persistence;
 public sealed class InvoiceHubDbContext(
     DbContextOptions<InvoiceHubDbContext> options,
     ITenantProvider tenantProvider)
-    : IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>(options)
+    : IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>(options), IApplicationDbContext
 {
     /// <summary>The tenant of the current request; null when none is known.</summary>
     public Guid? CurrentTenantId => tenantProvider.TenantId;
