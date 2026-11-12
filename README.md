@@ -1,57 +1,59 @@
 # InvoiceHub
 
-Multi-tenant GST invoicing REST API built with ASP.NET Core (.NET 8).
+Multi-tenant GST invoicing REST API built with ASP.NET Core (.NET 8). Businesses register, add customers and products, raise GST-correct invoices (CGST + SGST within a state, IGST across states), receive payments through an HMAC-signed webhook, and get live updates over SignalR.
 
-> Status: in development.
+## Status
+
+| Area | State |
+|---|---|
+| API, multi-tenancy, auth, invoices, GST, reports, payments webhook, SignalR | Built and tested (`dotnet test`) |
+| CI pipeline ([azure-pipelines.yml](azure-pipelines.yml)) | Written. Its steps were rehearsed locally. **It has not yet run on Azure DevOps** |
+| Azure resources ([infra/provision.ps1](infra/provision.ps1)) | Written and syntax-checked. **Not yet run against Azure** |
+| Live deployment | **Not deployed yet.** There is no public URL |
+| Moq and FluentAssertions based unit tests | Not written yet. Tests use xUnit assertions only |
 
 ## Tech stack
 
-C# 12, .NET 8, ASP.NET Core Web API, EF Core, SQL Server, Dapper, MediatR, FluentValidation, SignalR, ASP.NET Core Identity (JWT), xUnit, Moq, Serilog, Azure App Service, Azure SQL, Azure DevOps.
+C# 12, .NET 8, ASP.NET Core Web API, EF Core 8, SQL Server, Dapper, MediatR, FluentValidation, SignalR, ASP.NET Core Identity with JWT, Serilog, xUnit, BenchmarkDotNet, Azure DevOps pipeline, Azure App Service and Azure SQL (deployment prepared, see below).
 
-## Planned architecture
+## Architecture
+
+Clean Architecture: dependencies point inwards.
 
 ```
 src/
-  InvoiceHub.Domain          entities, no dependencies
-  InvoiceHub.Application     MediatR commands/queries, validators, DTOs
-  InvoiceHub.Infrastructure  EF Core, migrations, Dapper, Identity
-  InvoiceHub.Api             controllers, JWT, SignalR hub, Serilog
+  InvoiceHub.Domain          entities and business rules, no dependencies
+  InvoiceHub.Application     MediatR commands and queries, validators, DTOs, abstractions
+  InvoiceHub.Infrastructure  EF Core, migrations, Dapper, Identity, JWT
+  InvoiceHub.Api             controllers, SignalR hub, Serilog, health checks, rate limiting
 tests/
   InvoiceHub.UnitTests
-  InvoiceHub.IntegrationTests
+  InvoiceHub.IntegrationTests   the real API against a throwaway LocalDB database
+benchmarks/
+  InvoiceHub.Benchmarks         100k-invoice seeder and the EF vs Dapper benchmark
+infra/provision.ps1             creates the Azure resources
+azure-pipelines.yml             build, test, package, deploy
 ```
 
-## Roadmap
+Choices worth knowing about:
 
-- [x] Solution skeleton, domain entities, first migration
-- [x] Multi-tenancy with EF Core global query filters
-- [x] Identity, JWT, policy-based authorization
-- [x] CQRS with MediatR and FluentValidation
-- [x] GST calculation (CGST/SGST vs IGST)
-- [x] Dapper stored procedure for GST reports (with benchmark)
-- [x] Payment webhook (HMAC) and SignalR updates
-- [ ] Unit and integration tests
-- [ ] Serilog, CI pipeline, Azure deployment
+- **Multi-tenancy:** every tenant-owned entity has an EF Core global query filter on the tenant id taken from the signed-in user's token, and a save-time guard that rejects writes for another tenant. With no tenant, queries return nothing (fail closed). Another tenant's record is a 404, not a 403.
+- **CQRS with MediatR:** a pipeline behavior runs the FluentValidation validators before every handler. MediatR is pinned to 12.5.0, the last release under the Apache licence (13 and later need a licence key in production).
+- **`IApplicationDbContext` exposes EF `DbSet`s,** so the Application project references EF Core (without a database provider). This is a pragmatic choice over wrapping everything in repositories.
+- **Money rules live in the domain,** not in controllers: GST split, rounding, payment application and invoice status changes.
 
 ## Getting started
 
 Prerequisites: .NET 8 SDK, SQL Server LocalDB, and the EF Core CLI (`dotnet tool install --global dotnet-ef --version 8.0.34`).
 
-The JWT signing key is never committed. Set one for local development (at least 32 characters) before running the API or the EF tools:
+Two secrets are never committed. Each must be at least 32 characters, and the API refuses to start without them. Set them once for local development:
 
 ```bash
 dotnet user-secrets set "Jwt:SigningKey" "<a long random string>" --project src/InvoiceHub.Api
-```
-
-In other environments use the `Jwt__SigningKey` environment variable.
-
-The payment webhook has its own shared secret, also never committed and also at least 32 characters. The API refuses to start without it:
-
-```bash
 dotnet user-secrets set "PaymentWebhook:Secret" "<a different long random string>" --project src/InvoiceHub.Api
 ```
 
-In other environments use `PaymentWebhook__Secret`.
+In other environments use the environment variables `Jwt__SigningKey` and `PaymentWebhook__Secret`.
 
 ```bash
 dotnet build
@@ -59,14 +61,28 @@ dotnet ef database update --project src/InvoiceHub.Infrastructure --startup-proj
 dotnet run --project src/InvoiceHub.Api
 ```
 
-The default connection string in `src/InvoiceHub.Api/appsettings.json` points at `(localdb)\MSSQLLocalDB`. Swagger UI is served at `/swagger` in Development.
+The default connection string in `src/InvoiceHub.Api/appsettings.json` points at `(localdb)\MSSQLLocalDB`. Swagger UI is served at `/swagger` in Development only. The EF tools do not need the secrets: they build the context through a design-time factory that reads `ConnectionStrings__InvoiceHub` and falls back to LocalDB.
+
+## Configuration
+
+| Setting | Purpose | Default |
+|---|---|---|
+| `ConnectionStrings:InvoiceHub` | SQL Server connection string | LocalDB |
+| `Jwt:SigningKey` | HMAC key for access tokens, 32+ characters. **Secret** | none, required |
+| `Jwt:Issuer`, `Jwt:Audience`, `Jwt:ExpiryMinutes` | Token settings | `InvoiceHub`, `InvoiceHub.Clients`, 60 |
+| `PaymentWebhook:Secret` | Shared secret for webhook signatures, 32+ characters. **Secret** | none, required |
+| `PaymentWebhook:ToleranceSeconds` | How far a webhook timestamp may be from the server clock | 300 |
+| `RateLimiting:AuthPermitsPerMinute` | Register and login requests per client address per minute | 10 |
+| `RateLimiting:WebhookPermitsPerMinute` | Webhook requests per client address per minute | 300 |
+| `Serilog:*` | Log levels and sinks | console plus rolling JSON file in `logs/` |
+| `AllowedHosts` | Host names the app answers to | `*` (set it in production) |
 
 ## Authentication
 
 | Endpoint | Access | Purpose |
 |---|---|---|
-| `POST /api/auth/register` | anonymous | Create a business (tenant) and its first user, who becomes Admin |
-| `POST /api/auth/login` | anonymous | Exchange email and password for a JWT (account locks for 15 minutes after 5 failures) |
+| `POST /api/auth/register` | anonymous, rate limited | Create a business (tenant) and its first user, who becomes Admin |
+| `POST /api/auth/login` | anonymous, rate limited | Exchange email and password for a JWT (account locks for 15 minutes after 5 failures) |
 | `GET /api/auth/me` | any tenant user | Show who the token belongs to |
 | `POST /api/users` | Admin only | Create a Staff user in the caller's own tenant |
 
@@ -91,9 +107,9 @@ There are no list, update or delete endpoints yet.
 | `POST /api/invoices/{id}/issue` | Issue a draft invoice. It then cannot be edited and can receive payments |
 | `GET /api/invoices/{id}` | Get an invoice with its lines (another tenant's invoice is a 404) |
 
-Requests are MediatR commands and queries. A pipeline behavior runs the FluentValidation validators before the handler, so handlers only see valid input. An invoice line is either a **catalogue line** (`productId` plus `quantity`; price, HSN code and GST rate come from the product and cannot be overridden) or a **custom line** (`description`, `hsnCode`, `unitPrice`, `gstRate`).
+An invoice line is either a **catalogue line** (`productId` plus `quantity`; price, HSN code and GST rate come from the product and cannot be overridden) or a **custom line** (`description`, `hsnCode`, `unitPrice`, `gstRate`).
 
-Errors are returned as ProblemDetails: 400 validation, 404 not found, 409 conflict (such as a duplicate invoice number), 422 business rule violated.
+Errors are returned as ProblemDetails: 400 validation, 404 not found, 409 conflict (such as a duplicate invoice number), 422 business rule violated, 429 rate limited.
 
 ### GST
 
@@ -104,9 +120,7 @@ The seller's state is copied from the tenant onto each invoice when it is create
 | Same | CGST + SGST, each half the rate |
 | Different | IGST at the full rate |
 
-Tax is rounded to 2 decimals (half away from zero) per line, and invoice totals are the sum of those rounded line amounts. The response carries `cgstAmount`, `sgstAmount`, `igstAmount` on each line and `taxableTotal`, `cgstTotal`, `sgstTotal`, `igstTotal`, `taxTotal`, `grandTotal` on the invoice. There is no whole-rupee round-off on the grand total. Valid rates are the slabs 0, 0.25, 3, 5, 12, 18 and 28 percent. Cess, reverse charge and e-invoicing are not implemented.
-
-MediatR is pinned to 12.5.0, the last release under the Apache licence (13 and later need a licence key in production).
+Tax is rounded to 2 decimals (half away from zero) per line, and invoice totals are the sum of those rounded line amounts. The response carries `cgstAmount`, `sgstAmount`, `igstAmount` on each line and `taxableTotal`, `cgstTotal`, `sgstTotal`, `igstTotal`, `taxTotal`, `grandTotal`, `amountPaid`, `balanceDue` on the invoice. There is no whole-rupee round-off on the grand total. Valid rates are the slabs 0, 0.25, 3, 5, 12, 18 and 28 percent. Cess, reverse charge and e-invoicing are not implemented.
 
 ## Payments
 
@@ -128,6 +142,7 @@ Body: `{ "eventId": "evt_123", "invoiceId": "<guid>", "amount": 500.00, "currenc
 | 409 | Event id already used for another invoice, or the invoice changed at the same moment (retry) |
 | 413 | Body over 64 KB |
 | 422 | Not payable: draft, cancelled, already paid, or more than the balance due |
+| 429 | Too many requests from one address |
 
 How it is built:
 
@@ -151,7 +166,7 @@ There is no real payment provider behind this: the endpoint defines the contract
 
 ### Live updates (SignalR)
 
-After a payment is saved, the API pushes a `PaymentReceived` message to every connected client of that tenant, and to nobody else. Connect to `/hubs/invoices` with the same JWT you use for the REST API (any role). Browsers cannot set headers on a WebSocket, so the token can go in the `access_token` query string, which the API accepts for the hub path only.
+After a payment is saved, the API pushes a `PaymentReceived` message to every connected client of that tenant, and to nobody else. Connect to `/hubs/invoices` with the same JWT you use for the REST API (any role). Browsers cannot set headers on a WebSocket, so the token can go in the `access_token` query string, which the API accepts for the hub path only, and it is never written to the logs. A connection is closed when its token expires.
 
 ```js
 const connection = new signalR.HubConnectionBuilder()
@@ -176,16 +191,81 @@ dotnet run -c Release --project benchmarks/InvoiceHub.Benchmarks -- seed    # ab
 dotnet run -c Release --project benchmarks/InvoiceHub.Benchmarks -- bench   # several minutes
 ```
 
+## Observability
+
+- **Logging:** Serilog, one structured line per request with the tenant id and user id. Logs go to the console and to a rolling JSON file in `logs/` (14 days). Request bodies, query strings, emails, tokens and webhook signatures are never logged, and tests check this.
+- **Health:** `GET /health` says the process is up. `GET /health/ready` also checks the database and returns 503 if it cannot connect. Both are anonymous and return only `Healthy` or `Unhealthy`.
+
+## Security
+
+- Secure by default: every endpoint requires a signed-in tenant user unless it opts out with `[AllowAnonymous]`. Roles: Admin and Staff.
+- Rate limiting per client address on register, login and the webhook. Behind a proxy it only sees the real client address if forwarded headers are enabled (`ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, set by the provisioning script).
+- Passwords are hashed by ASP.NET Core Identity, with lockout after 5 failed attempts.
+- HSTS in production. HTTPS-only, TLS 1.2 and FTP off are set on the App Service by the provisioning script.
+- No secrets in the repository. The CI pipeline fails the build if a NuGet package with a known vulnerability is used.
+
+Known limitations, for honesty:
+
+- Access tokens last 60 minutes and cannot be revoked: deactivating a tenant or user takes effect at the next login. There are no refresh tokens.
+- A GSTIN is checked for format and state only. Its checksum character and its owner are not verified, so anyone can register a well-formed GSTIN that nobody has claimed yet.
+- Register and create-user tell you when an email is already used, which lets someone test whether an email has an account.
+- One shared webhook secret covers all tenants, and rotating it needs a short outage.
+- The SignalR hub is tested in-process (long polling and WebSockets), not against a deployed server.
+
 ## Tests
 
 ```bash
 dotnet test
 ```
 
-Integration tests create a throwaway database on LocalDB from the real migrations and drop it afterwards, so LocalDB must be running.
+xUnit unit tests cover the domain rules, GST maths, payment rules, signature verification and validators. Integration tests host the real API with `WebApplicationFactory`, build a throwaway database on LocalDB from the real migrations and drop it afterwards, so LocalDB must be running. They cover tenant isolation, authorization, the webhook (forged, tampered, replayed and concurrent requests), the SignalR push, logging, health checks, rate limiting and HSTS.
 
 To add a migration:
 
 ```bash
 dotnet ef migrations add <Name> --project src/InvoiceHub.Infrastructure --startup-project src/InvoiceHub.Api --output-dir Persistence/Migrations
 ```
+
+## CI/CD and deployment
+
+[azure-pipelines.yml](azure-pipelines.yml) has two stages.
+
+| Stage | Runs on | Steps |
+|---|---|---|
+| Build | every push and pull request | restore, build (warnings are errors), fail on vulnerable packages, run all tests with coverage, generate the idempotent migration script, publish and zip the API |
+| Deploy | `main` only, after approval if you add one to the environment | apply the migration script to Azure SQL, deploy the zip to App Service, smoke test `/health/ready` |
+
+Migrations run before the new code is deployed. The script is idempotent, and `sqlcmd` is run with `-I` because the Identity tables use filtered indexes.
+
+### Setting it up
+
+1. **Azure resources.** Install the Azure CLI, run `az login`, then:
+
+   ```powershell
+   $env:INVOICEHUB_SQL_ADMIN_PASSWORD = '<a strong password>'
+   ./infra/provision.ps1 -Prefix <lowercase-unique-name>
+   ```
+
+   It creates a resource group, Azure SQL (Basic) and a Linux App Service plan with a .NET 8 web app, hardens it, and sets the connection string and the two secrets as App Service settings. The free F1 plan and Basic SQL (about US$5 a month from your credit) are the defaults. `az group delete --name <prefix>-rg --yes` removes everything.
+2. **Azure DevOps.** Create a project and connect this GitHub repository. Add an Azure Resource Manager service connection to your subscription, an environment named `invoicehub-production` (optionally with an approval check), and a variable group `invoicehub-prod` with `azureServiceConnection`, `webAppName`, `sqlServerName`, `sqlDatabaseName`, `sqlAdminUser` and `sqlAdminPassword` (secret). The script prints the values to use.
+3. **Pipeline.** Create a pipeline from `azure-pipelines.yml`. The first run on `main` migrates the database and deploys.
+
+### What has and has not been verified
+
+Verified on a development machine, step by step as the pipeline runs them: a Release build with 0 warnings, the vulnerability check, the migration script applied twice to an empty database, the published build running in Production mode against that database (health, registration, login, rejected webhook, JSON log file), and the app refusing to start without its secrets.
+
+Not verified: the pipeline running on Azure DevOps, `infra/provision.ps1` against a real subscription, and the deployed site. Expect small fixes on the first real run.
+
+## Roadmap
+
+- [x] Solution skeleton, domain entities, first migration
+- [x] Multi-tenancy with EF Core global query filters
+- [x] Identity, JWT, policy-based authorization
+- [x] CQRS with MediatR and FluentValidation
+- [x] GST calculation (CGST/SGST vs IGST)
+- [x] Dapper stored procedure for GST reports (with benchmark)
+- [x] Payment webhook (HMAC) and SignalR updates
+- [x] Serilog, health checks, rate limiting, HSTS
+- [x] CI/CD pipeline and Azure provisioning script (written, not yet run on Azure)
+- [ ] First deployment to Azure and a public URL
+- [ ] Unit tests with Moq and FluentAssertions
