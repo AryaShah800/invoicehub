@@ -16,7 +16,7 @@ using Microsoft.EntityFrameworkCore;
 namespace InvoiceHub.IntegrationTests.Api;
 
 [Collection(ApiCollection.Name)]
-public sealed class PaymentWebhookTests(ApiFactory factory)
+public sealed partial class PaymentWebhookTests(ApiFactory factory)
 {
     private const string Url = "/api/webhooks/payments";
     private readonly HttpClient _client = factory.CreateClient();
