@@ -45,7 +45,18 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         return new InvoiceHubDbContext(options, tenant);
     }
 
-    protected override void ConfigureWebHost(IWebHostBuilder builder) => builder.UseEnvironment("Development");
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseEnvironment("Development");
+
+        // Every test registers and logs in from the same address, so the production limits would throttle the
+        // suite. Tests that exercise the limiter set their own low limits.
+        builder.ConfigureServices(services => services.Configure<InvoiceHub.Api.RateLimiting.RateLimitSettings>(settings =>
+        {
+            settings.AuthPermitsPerMinute = 100_000;
+            settings.WebhookPermitsPerMinute = 100_000;
+        }));
+    }
 
     public async Task InitializeAsync()
     {
