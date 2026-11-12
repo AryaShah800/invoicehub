@@ -1,6 +1,7 @@
 using InvoiceHub.Api.Auth;
 using InvoiceHub.Api.Errors;
 using InvoiceHub.Api.Hubs;
+using InvoiceHub.Api.Logging;
 using InvoiceHub.Api.Tenancy;
 using InvoiceHub.Api.Webhooks;
 using InvoiceHub.Application;
@@ -12,9 +13,17 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Serilog replaces the default logger. Sinks and levels come from the "Serilog" section of the configuration,
+// so they can be changed per environment without code changes.
+builder.Host.UseSerilog((context, services, logger) => logger
+    .ReadFrom.Configuration(context.Configuration)
+    .ReadFrom.Services(services)
+    .Enrich.FromLogContext());
 
 builder.Services.AddHttpContextAccessor();
 // One instance per request serves both: it reads the tenant (ITenantProvider) and lets the webhook set it (ITenantAssigner).
@@ -97,6 +106,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseSerilogRequestLogging(RequestLogging.Configure);
 app.UseExceptionHandler();
 app.UseHttpsRedirection();
 app.UseAuthentication();
