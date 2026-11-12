@@ -32,6 +32,8 @@ public sealed class ApiExceptionHandler(IProblemDetailsService problemDetails) :
             NotFoundException notFound => Problem(StatusCodes.Status404NotFound, "Not found", notFound.Message),
             ConflictException conflict => Problem(StatusCodes.Status409Conflict, "Conflict", conflict.Message),
             DomainException domain => Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violated", domain.Message),
+            DbUpdateConcurrencyException =>
+                Problem(StatusCodes.Status409Conflict, "Conflict", "The record was changed by another request. Please retry."),
             DbUpdateException { InnerException: SqlException { Number: SqlUniqueIndexViolation or SqlUniqueConstraintViolation } } =>
                 Problem(StatusCodes.Status409Conflict, "Conflict", "The data conflicts with an existing record."),
             _ => null,

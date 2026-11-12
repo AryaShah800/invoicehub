@@ -2,6 +2,7 @@ using InvoiceHub.Api.Auth;
 using InvoiceHub.Api.Errors;
 using InvoiceHub.Api.Hubs;
 using InvoiceHub.Api.Tenancy;
+using InvoiceHub.Api.Webhooks;
 using InvoiceHub.Application;
 using InvoiceHub.Application.Abstractions;
 using InvoiceHub.Application.Auth;
@@ -24,6 +25,7 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+builder.Services.AddSingleton(PaymentWebhookOptions.Load(builder.Configuration)); // fails at startup if the secret is missing
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IPaymentNotifier, SignalRPaymentNotifier>();
 
