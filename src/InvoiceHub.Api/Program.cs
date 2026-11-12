@@ -1,7 +1,9 @@
 using InvoiceHub.Api.Auth;
 using InvoiceHub.Api.Errors;
+using InvoiceHub.Api.Health;
 using InvoiceHub.Api.Hubs;
 using InvoiceHub.Api.Logging;
+using InvoiceHub.Api.RateLimiting;
 using InvoiceHub.Api.Tenancy;
 using InvoiceHub.Api.Webhooks;
 using InvoiceHub.Application;
@@ -35,6 +37,8 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddSingleton(PaymentWebhookOptions.Load(builder.Configuration)); // fails at startup if the secret is missing
+builder.Services.AddApiRateLimiting(builder.Configuration);
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database", tags: ["ready"]);
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IPaymentNotifier, SignalRPaymentNotifier>();
 
@@ -108,11 +112,24 @@ if (app.Environment.IsDevelopment())
 
 app.UseSerilogRequestLogging(RequestLogging.Configure);
 app.UseExceptionHandler();
+if (!app.Environment.IsDevelopment())
+    app.UseHsts(); // tells browsers to use HTTPS only; sent on HTTPS responses
 app.UseHttpsRedirection();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapHub<InvoiceEventsHub>(InvoiceEventsHub.Path);
+app.MapHub<InvoiceEventsHub>(InvoiceEventsHub.Path, options =>
+{
+    // SignalR checks the token only when a client connects. This closes the connection when the token expires,
+    // so a user whose access ended cannot keep receiving payment events on an old connection.
+    options.CloseOnAuthenticationExpiration = true;
+});
+
+// Probes for the host (Azure App Service, load balancers). Anonymous, and they return only a status word.
+// /health says the process is up; /health/ready also checks the database.
+app.MapHealthChecks("/health", new() { Predicate = _ => false }).AllowAnonymous();
+app.MapHealthChecks("/health/ready", new() { Predicate = check => check.Tags.Contains("ready") }).AllowAnonymous();
 
 app.Run();
 
