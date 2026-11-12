@@ -1,5 +1,6 @@
 using InvoiceHub.Application.Abstractions;
 using InvoiceHub.Infrastructure.Persistence;
+using InvoiceHub.Infrastructure.Persistence.Interceptors;
 using Microsoft.EntityFrameworkCore;
 
 namespace InvoiceHub.IntegrationTests.Persistence;
@@ -29,6 +30,9 @@ public sealed class TestDatabase : IDisposable
     {
         var options = new DbContextOptionsBuilder<InvoiceHubDbContext>()
             .UseSqlServer(_connectionString)
+            .AddInterceptors(
+                new TenantWriteGuardInterceptor(tenant),
+                new AuditInterceptor(TimeProvider.System))
             .Options;
         return new InvoiceHubDbContext(options, tenant);
     }

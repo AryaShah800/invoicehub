@@ -15,12 +15,15 @@ public static class DependencyInjection
 
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<AuditInterceptor>();
+        services.AddScoped<TenantWriteGuardInterceptor>();
 
         services.AddDbContext<InvoiceHubDbContext>((sp, options) =>
             options
                 .UseSqlServer(connectionString, sql =>
                     sql.MigrationsAssembly(typeof(InvoiceHubDbContext).Assembly.FullName))
-                .AddInterceptors(sp.GetRequiredService<AuditInterceptor>()));
+                .AddInterceptors(
+                    sp.GetRequiredService<TenantWriteGuardInterceptor>(),
+                    sp.GetRequiredService<AuditInterceptor>()));
 
         return services;
     }
