@@ -23,7 +23,7 @@ tests/
 
 ## Roadmap
 
-- [ ] Solution skeleton, domain entities, first migration
+- [x] Solution skeleton, domain entities, first migration
 - [ ] Multi-tenancy with EF Core global query filters
 - [ ] Identity, JWT, policy-based authorization
 - [ ] CQRS with MediatR and FluentValidation
@@ -35,4 +35,18 @@ tests/
 
 ## Getting started
 
-Setup instructions will be added as the project takes shape.
+Prerequisites: .NET 8 SDK, SQL Server LocalDB, and the EF Core CLI (`dotnet tool install --global dotnet-ef --version 8.0.34`).
+
+```bash
+dotnet build
+dotnet ef database update --project src/InvoiceHub.Infrastructure --startup-project src/InvoiceHub.Api
+dotnet run --project src/InvoiceHub.Api
+```
+
+The default connection string in `src/InvoiceHub.Api/appsettings.json` points at `(localdb)\MSSQLLocalDB`. Swagger UI is served at `/swagger` in Development.
+
+To add a migration:
+
+```bash
+dotnet ef migrations add <Name> --project src/InvoiceHub.Infrastructure --startup-project src/InvoiceHub.Api --output-dir Persistence/Migrations
+```
