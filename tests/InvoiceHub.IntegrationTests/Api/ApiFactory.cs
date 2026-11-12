@@ -15,8 +15,9 @@ namespace InvoiceHub.IntegrationTests.Api;
 public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     public const string SigningKey = "integration-test-signing-key-0123456789-abcdef";
+    public const string WebhookSecret = "integration-test-webhook-secret-0123456789";
 
-    private static readonly string[] EnvironmentKeys = ["ConnectionStrings__InvoiceHub", "Jwt__SigningKey"];
+    private static readonly string[] EnvironmentKeys = ["ConnectionStrings__InvoiceHub", "Jwt__SigningKey", "PaymentWebhook__Secret"];
 
     private readonly string _connectionString;
 
@@ -27,6 +28,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             $"Server=(localdb)\\MSSQLLocalDB;Database={database};Trusted_Connection=True;TrustServerCertificate=True";
         Environment.SetEnvironmentVariable("ConnectionStrings__InvoiceHub", _connectionString);
         Environment.SetEnvironmentVariable("Jwt__SigningKey", SigningKey);
+        Environment.SetEnvironmentVariable("PaymentWebhook__Secret", WebhookSecret);
     }
 
     /// <summary>
