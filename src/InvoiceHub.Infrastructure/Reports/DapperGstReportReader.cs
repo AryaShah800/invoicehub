@@ -28,6 +28,7 @@ public sealed class DapperGstReportReader(InvoiceHubDbContext db) : IGstReportRe
                 "dbo.usp_GstSummaryReport",
                 new { TenantId = tenantId, FromDate = from.ToDateTime(TimeOnly.MinValue), ToDate = to.ToDateTime(TimeOnly.MinValue) },
                 transaction: db.Database.CurrentTransaction?.GetDbTransaction(),
+                commandTimeout: db.Database.GetCommandTimeout(), // honour the context's timeout; null means the default
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken);
 
