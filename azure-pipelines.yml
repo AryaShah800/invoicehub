@@ -1,0 +1,171 @@
+# Azure DevOps pipeline for InvoiceHub: build, test, package, then deploy to Azure App Service + Azure SQL.
+#
+# Setup (once, in Azure DevOps) is described in README.md under "Deployment". Summary:
+#   1. A service connection to your Azure subscription (Project settings > Service connections).
+#   2. A variable group named "invoicehub-prod" with: azureServiceConnection, webAppName, sqlServerName,
+#      sqlDatabaseName, sqlAdminUser, and sqlAdminPassword (mark that one secret).
+#   3. An environment named "invoicehub-production" (add an approval check there if you want a manual gate).
+# The Build stage needs none of that and runs on every push and pull request.
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  buildConfiguration: Release
+
+stages:
+  - stage: Build
+    displayName: Build and test
+    jobs:
+      - job: BuildAndTest
+        displayName: Build, test, package
+        # Windows because the integration tests build throwaway databases on SQL Server LocalDB.
+        pool:
+          vmImage: windows-latest
+        steps:
+          - task: UseDotNet@2
+            displayName: Install .NET 8 SDK
+            inputs:
+              packageType: sdk
+              version: 8.0.x
+
+          - task: PowerShell@2
+            displayName: Start SQL Server LocalDB
+            inputs:
+              targetType: inline
+              script: |
+                $instances = sqllocaldb info
+                if ($instances -notcontains 'MSSQLLocalDB') { sqllocaldb create MSSQLLocalDB }
+                sqllocaldb start MSSQLLocalDB
+                sqllocaldb info MSSQLLocalDB
+
+          - script: dotnet tool install --global dotnet-ef --version 8.0.34
+            displayName: Install dotnet-ef
+
+          - script: dotnet restore InvoiceHub.sln
+            displayName: Restore
+
+          - script: dotnet build InvoiceHub.sln --no-restore -c $(buildConfiguration)
+            displayName: Build (warnings are errors)
+
+          - task: PowerShell@2
+            displayName: Fail on vulnerable packages
+            inputs:
+              targetType: inline
+              script: |
+                $report = dotnet list InvoiceHub.sln package --vulnerable --include-transitive 2>&1 | Out-String
+                Write-Host $report
+                if ($report -match 'has the following vulnerable packages') {
+                  Write-Error 'A package with a known vulnerability is in use. See the list above.'
+                  exit 1
+                }
+
+          - script: >
+              dotnet test InvoiceHub.sln --no-build -c $(buildConfiguration)
+              --logger trx --results-directory $(Agent.TempDirectory)/test-results
+              --collect:"XPlat Code Coverage"
+            displayName: Unit and integration tests
+
+          - task: PublishTestResults@2
+            displayName: Publish test results
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: VSTest
+              testResultsFiles: '$(Agent.TempDirectory)/test-results/**/*.trx'
+              failTaskOnFailedTests: true
+
+          - task: PublishCodeCoverageResults@2
+            displayName: Publish code coverage
+            condition: succeededOrFailed()
+            inputs:
+              summaryFileLocation: '$(Agent.TempDirectory)/test-results/**/coverage.cobertura.xml'
+
+          # The EF tools use the design-time factory, so no application secrets are needed to make the script.
+          - script: >
+              dotnet ef migrations script --idempotent --no-build --configuration $(buildConfiguration)
+              --project src/InvoiceHub.Infrastructure --startup-project src/InvoiceHub.Api
+              --output $(Build.ArtifactStagingDirectory)/sql/migrations.sql
+            displayName: Generate the idempotent migration script
+            env:
+              ASPNETCORE_ENVIRONMENT: Production
+
+          - script: >
+              dotnet publish src/InvoiceHub.Api/InvoiceHub.Api.csproj --no-build -c $(buildConfiguration)
+              -o $(Build.ArtifactStagingDirectory)/api/site
+            displayName: Publish the API
+
+          - task: ArchiveFiles@2
+            displayName: Zip the API for App Service
+            inputs:
+              rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/api/site'
+              includeRootFolder: false
+              archiveType: zip
+              archiveFile: '$(Build.ArtifactStagingDirectory)/api/invoicehub-api.zip'
+
+          - task: PublishBuildArtifacts@1
+            displayName: Publish the deployment artifacts
+            inputs:
+              pathToPublish: '$(Build.ArtifactStagingDirectory)'
+              artifactName: drop
+              # The unzipped publish folder is only an intermediate step; the zip and the SQL script are the artifacts.
+
+  - stage: Deploy
+    displayName: Deploy to Azure
+    dependsOn: Build
+    # Only the main branch deploys; pull requests stop after the Build stage.
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+    variables:
+      - group: invoicehub-prod
+    jobs:
+      - deployment: DeployProduction
+        displayName: Migrate the database and deploy the API
+        environment: invoicehub-production
+        pool:
+          vmImage: windows-latest
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Migrations go first, so the new code never runs against an old schema. The script is idempotent,
+                # so running it again when nothing changed does nothing. sqlcmd needs -I (QUOTED_IDENTIFIER ON)
+                # because the Identity tables use filtered indexes.
+                - task: PowerShell@2
+                  displayName: Apply database migrations to Azure SQL
+                  inputs:
+                    targetType: inline
+                    script: |
+                      sqlcmd -S "tcp:$(sqlServerName).database.windows.net,1433" -d "$(sqlDatabaseName)" `
+                        -U "$(sqlAdminUser)" -I -b -N -i "$(Pipeline.Workspace)/drop/sql/migrations.sql"
+                      if ($LASTEXITCODE -ne 0) { throw "Migration script failed with exit code $LASTEXITCODE" }
+                  env:
+                    SQLCMDPASSWORD: $(sqlAdminPassword)   # secret variables must be mapped explicitly
+
+                - task: AzureWebApp@1
+                  displayName: Deploy the API to App Service
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    appType: webAppLinux
+                    appName: $(webAppName)
+                    package: '$(Pipeline.Workspace)/drop/api/invoicehub-api.zip'
+
+                - task: PowerShell@2
+                  displayName: Smoke test /health/ready
+                  inputs:
+                    targetType: inline
+                    script: |
+                      $url = "https://$(webAppName).azurewebsites.net/health/ready"
+                      for ($i = 1; $i -le 12; $i++) {
+                        try {
+                          $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 20
+                          if ($response.StatusCode -eq 200) { Write-Host "Ready after $i attempt(s): $($response.Content)"; exit 0 }
+                        } catch { Write-Host "Attempt $i failed: $($_.Exception.Message)" }
+                        Start-Sleep -Seconds 10
+                      }
+                      throw "The site did not become ready at $url"
