@@ -1,5 +1,6 @@
 using InvoiceHub.Domain.Invoices;
 using InvoiceHub.Domain.Products;
+using InvoiceHub.Domain.Tenants;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -19,6 +20,11 @@ internal sealed class InvoiceLineConfiguration : IEntityTypeConfiguration<Invoic
         builder.Property(l => l.UnitPrice).HasPrecision(18, 2);
         builder.Property(l => l.GstRate).HasPrecision(5, 2);
         builder.Property(l => l.TaxableValue).HasPrecision(18, 2);
+
+        builder.HasOne<Tenant>()
+            .WithMany()
+            .HasForeignKey(l => l.TenantId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne<Product>()
             .WithMany()

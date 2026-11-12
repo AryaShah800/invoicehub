@@ -6,7 +6,7 @@ namespace InvoiceHub.Domain.Invoices;
 /// One line on an invoice. Product details are copied onto the line so later catalogue
 /// changes do not alter invoices that were already raised.
 /// </summary>
-public sealed class InvoiceLine : Entity
+public sealed class InvoiceLine : Entity, ITenantOwned
 {
     public const int DescriptionMaxLength = 500;
 
@@ -16,9 +16,10 @@ public sealed class InvoiceLine : Entity
         HsnCode = null!;
     }
 
-    internal InvoiceLine(Guid invoiceId, Guid? productId, string description, string hsnCode,
+    internal InvoiceLine(Guid tenantId, Guid invoiceId, Guid? productId, string description, string hsnCode,
         decimal quantity, decimal unitPrice, decimal gstRate)
     {
+        TenantId = tenantId;
         InvoiceId = invoiceId;
         ProductId = productId;
         Description = Guard.NotBlank(description, "Description", DescriptionMaxLength);
@@ -29,6 +30,7 @@ public sealed class InvoiceLine : Entity
         TaxableValue = Math.Round(Quantity * UnitPrice, 2, MidpointRounding.AwayFromZero);
     }
 
+    public Guid TenantId { get; private set; }
     public Guid InvoiceId { get; private set; }
     public Guid? ProductId { get; private set; }
     public string Description { get; private set; }

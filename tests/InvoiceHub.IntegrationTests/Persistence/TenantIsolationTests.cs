@@ -59,6 +59,17 @@ public sealed class TenantIsolationTests : IDisposable
     }
 
     [Fact]
+    public async Task Invoice_lines_queried_directly_are_limited_to_the_current_tenant()
+    {
+        await using var context = _db.CreateContext(new FakeTenantProvider { TenantId = _globex.Id });
+
+        var lines = await context.InvoiceLines.ToListAsync();
+
+        var line = Assert.Single(lines);
+        Assert.Equal("Globex Gadget", line.Description);
+    }
+
+    [Fact]
     public async Task Another_tenants_invoice_cannot_be_loaded_by_id()
     {
         Guid globexInvoiceId;

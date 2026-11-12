@@ -104,7 +104,7 @@ public sealed class Invoice : AuditableEntity, ITenantOwned
         decimal quantity, decimal unitPrice, decimal gstRate)
     {
         EnsureDraft();
-        var line = new InvoiceLine(Id, productId, description, hsnCode, quantity, unitPrice, gstRate);
+        var line = new InvoiceLine(TenantId, Id, productId, description, hsnCode, quantity, unitPrice, gstRate);
         _lines.Add(line);
         return line;
     }
