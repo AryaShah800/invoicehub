@@ -1,0 +1,27 @@
+using InvoiceHub.Infrastructure.Persistence;
+using InvoiceHub.Infrastructure.Persistence.Interceptors;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace InvoiceHub.Infrastructure;
+
+public static class DependencyInjection
+{
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    {
+        var connectionString = configuration.GetConnectionString("InvoiceHub")
+            ?? throw new InvalidOperationException("Connection string 'InvoiceHub' is not configured.");
+
+        services.AddSingleton(TimeProvider.System);
+        services.AddScoped<AuditInterceptor>();
+
+        services.AddDbContext<InvoiceHubDbContext>((sp, options) =>
+            options
+                .UseSqlServer(connectionString, sql =>
+                    sql.MigrationsAssembly(typeof(InvoiceHubDbContext).Assembly.FullName))
+                .AddInterceptors(sp.GetRequiredService<AuditInterceptor>()));
+
+        return services;
+    }
+}
