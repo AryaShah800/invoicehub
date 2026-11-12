@@ -16,11 +16,12 @@ public sealed class InvoiceLine : Entity, ITenantOwned
         HsnCode = null!;
     }
 
-    internal InvoiceLine(Guid tenantId, Guid invoiceId, Guid? productId, string description, string hsnCode,
+    internal InvoiceLine(Guid tenantId, Guid invoiceId, int lineNumber, Guid? productId, string description, string hsnCode,
         decimal quantity, decimal unitPrice, decimal gstRate)
     {
         TenantId = tenantId;
         InvoiceId = invoiceId;
+        LineNumber = lineNumber;
         ProductId = productId;
         Description = Guard.NotBlank(description, "Description", DescriptionMaxLength);
         HsnCode = GstRules.HsnCode(hsnCode);
@@ -32,6 +33,10 @@ public sealed class InvoiceLine : Entity, ITenantOwned
 
     public Guid TenantId { get; private set; }
     public Guid InvoiceId { get; private set; }
+
+    /// <summary>Position on the invoice, starting at 1.</summary>
+    public int LineNumber { get; private set; }
+
     public Guid? ProductId { get; private set; }
     public string Description { get; private set; }
     public string HsnCode { get; private set; }
@@ -39,4 +44,6 @@ public sealed class InvoiceLine : Entity, ITenantOwned
     public decimal UnitPrice { get; private set; }
     public decimal GstRate { get; private set; }
     public decimal TaxableValue { get; private set; }
+
+    internal void Renumber(int lineNumber) => LineNumber = lineNumber;
 }

@@ -73,6 +73,9 @@ public sealed class Invoice : AuditableEntity, ITenantOwned
         var line = _lines.Find(l => l.Id == lineId)
             ?? throw new DomainException("Invoice line not found.");
         _lines.Remove(line);
+
+        for (var i = 0; i < _lines.Count; i++)
+            _lines[i].Renumber(i + 1);
     }
 
     public void SetNotes(string? notes)
@@ -104,7 +107,7 @@ public sealed class Invoice : AuditableEntity, ITenantOwned
         decimal quantity, decimal unitPrice, decimal gstRate)
     {
         EnsureDraft();
-        var line = new InvoiceLine(TenantId, Id, productId, description, hsnCode, quantity, unitPrice, gstRate);
+        var line = new InvoiceLine(TenantId, Id, _lines.Count + 1, productId, description, hsnCode, quantity, unitPrice, gstRate);
         _lines.Add(line);
         return line;
     }

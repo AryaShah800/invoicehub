@@ -140,6 +140,9 @@ namespace InvoiceHub.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("InvoiceId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<int>("LineNumber")
+                        .HasColumnType("int");
+
                     b.Property<Guid?>("ProductId")
                         .HasColumnType("uniqueidentifier");
 
