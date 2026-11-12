@@ -22,6 +22,8 @@ public sealed class AuthService(
         var email = NormalizeEmail(request.Email);
         if (email is null)
             return AuthResult<AuthResponse>.Fail(AuthFailure.Validation, "Email is not valid.");
+        if (string.IsNullOrEmpty(request.Password))
+            return AuthResult<AuthResponse>.Fail(AuthFailure.Validation, "Password is required.");
 
         Tenant tenant;
         try
@@ -104,6 +106,8 @@ public sealed class AuthService(
         var email = NormalizeEmail(request.Email);
         if (email is null)
             return AuthResult<CreatedUserResponse>.Fail(AuthFailure.Validation, "Email is not valid.");
+        if (string.IsNullOrEmpty(request.Password))
+            return AuthResult<CreatedUserResponse>.Fail(AuthFailure.Validation, "Password is required.");
 
         var tenant = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, ct);
         if (tenant is null || !tenant.IsActive)
