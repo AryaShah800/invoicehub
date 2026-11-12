@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 namespace InvoiceHub.Benchmarks;
 
 /// <summary>
-/// The same GST summary two ways: the usp_GstSummaryReport stored procedure called with Dapper, and an
-/// EF Core LINQ query. Each call uses a fresh DbContext, as a request would.
+/// The same GST summary three ways: an EF Core LINQ query (COUNT DISTINCT), the same query reshaped to match
+/// the stored procedure, and the usp_GstSummaryReport stored procedure called with Dapper. Each call uses a fresh DbContext, as a request would.
 /// </summary>
 [MemoryDiagnoser]
 public class GstReportBenchmarks
@@ -34,8 +34,9 @@ public class GstReportBenchmarks
         var (from, to) = Dates;
         var viaProc = await Dapper_StoredProcedure();
         var viaEf = await EfCore_Linq();
-        if (!viaProc.SequenceEqual(viaEf))
-            throw new InvalidOperationException($"Dapper and EF disagree for range '{Range}'. Not benchmarking.");
+        var viaEfTwoStage = await EfCore_TwoStage();
+        if (!viaProc.SequenceEqual(viaEf) || !viaProc.SequenceEqual(viaEfTwoStage))
+            throw new InvalidOperationException($"The three readers disagree for range '{Range}'. Not benchmarking.");
         Console.WriteLine($"[{Range}] {from} to {to}: {viaProc.Sum(r => r.InvoiceCount):N0} invoice-slab rows, {viaProc.Count} slabs, results match.");
     }
 
@@ -45,6 +46,14 @@ public class GstReportBenchmarks
         var (from, to) = Dates;
         await using var db = BenchDatabase.CreateContext(_tenantId);
         return await new EfGstReportReader(db).GetSummaryAsync(_tenantId, from, to, default);
+    }
+
+    [Benchmark]
+    public async Task<IReadOnlyList<GstSummaryRow>> EfCore_TwoStage()
+    {
+        var (from, to) = Dates;
+        await using var db = BenchDatabase.CreateContext(_tenantId);
+        return await new EfTwoStageReader(db).GetSummaryAsync(_tenantId, from, to, default);
     }
 
     [Benchmark]

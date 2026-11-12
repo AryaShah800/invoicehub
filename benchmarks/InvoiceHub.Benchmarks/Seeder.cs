@@ -45,6 +45,7 @@ internal static class Seeder
         if (existing >= invoiceTarget)
         {
             Console.WriteLine($"Already seeded: {existing:N0} invoices. Nothing to do.");
+            await RefreshStatisticsAsync();
             return tenantId;
         }
 
@@ -67,7 +68,19 @@ internal static class Seeder
         }
 
         Console.WriteLine($"Seeded {created - existing:N0} invoices in {clock.Elapsed:mm\\:ss}.");
+        await RefreshStatisticsAsync();
         return tenantId;
+    }
+
+    /// <summary>
+    /// After a bulk load, refresh statistics once so the first timed queries do not trigger an automatic
+    /// statistics update in the middle of a measurement.
+    /// </summary>
+    private static async Task RefreshStatisticsAsync()
+    {
+        await using var db = BenchDatabase.CreateContext(null);
+        await db.Database.ExecuteSqlRawAsync("UPDATE STATISTICS dbo.Invoices WITH FULLSCAN; UPDATE STATISTICS dbo.InvoiceLines WITH FULLSCAN;");
+        Console.WriteLine("Statistics refreshed.");
     }
 
     private static Invoice NewInvoice(Guid tenantId, int index, Random random, List<Customer> customers, List<Product> products)
