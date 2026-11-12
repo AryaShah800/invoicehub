@@ -26,7 +26,7 @@ tests/
 - [x] Solution skeleton, domain entities, first migration
 - [x] Multi-tenancy with EF Core global query filters
 - [x] Identity, JWT, policy-based authorization
-- [ ] CQRS with MediatR and FluentValidation
+- [x] CQRS with MediatR and FluentValidation
 - [ ] GST calculation (CGST/SGST vs IGST)
 - [ ] Dapper stored procedure for GST reports (with benchmark)
 - [ ] Payment webhook (HMAC) and SignalR updates
@@ -63,6 +63,19 @@ The default connection string in `src/InvoiceHub.Api/appsettings.json` points at
 | `POST /api/users` | Admin only | Create a Staff user in the caller's own tenant |
 
 Tokens carry `sub`, `email`, `tenant_id` and `role` claims. The tenant for every request comes from the `tenant_id` claim, and that is what the EF Core query filters use. Every endpoint requires a signed-in tenant user unless it is marked `[AllowAnonymous]`. In Swagger, use Authorize and paste the token from `/api/auth/login`.
+
+## Invoices
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/invoices` | Create a draft invoice for one of your customers |
+| `GET /api/invoices/{id}` | Get an invoice with its lines (another tenant's invoice is a 404) |
+
+Requests are MediatR commands and queries. A pipeline behavior runs the FluentValidation validators before the handler, so handlers only see valid input. An invoice line is either a **catalogue line** (`productId` plus `quantity`; price, HSN code and GST rate come from the product and cannot be overridden) or a **custom line** (`description`, `hsnCode`, `unitPrice`, `gstRate`).
+
+Errors are returned as ProblemDetails: 400 validation, 404 not found, 409 conflict (such as a duplicate invoice number), 422 business rule violated.
+
+MediatR is pinned to 12.5.0, the last release under the Apache licence (13 and later need a licence key in production).
 
 ## Tests
 
