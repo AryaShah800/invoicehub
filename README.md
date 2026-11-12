@@ -27,7 +27,7 @@ tests/
 - [x] Multi-tenancy with EF Core global query filters
 - [x] Identity, JWT, policy-based authorization
 - [x] CQRS with MediatR and FluentValidation
-- [ ] GST calculation (CGST/SGST vs IGST)
+- [x] GST calculation (CGST/SGST vs IGST)
 - [ ] Dapper stored procedure for GST reports (with benchmark)
 - [ ] Payment webhook (HMAC) and SignalR updates
 - [ ] Unit and integration tests
@@ -74,6 +74,17 @@ Tokens carry `sub`, `email`, `tenant_id` and `role` claims. The tenant for every
 Requests are MediatR commands and queries. A pipeline behavior runs the FluentValidation validators before the handler, so handlers only see valid input. An invoice line is either a **catalogue line** (`productId` plus `quantity`; price, HSN code and GST rate come from the product and cannot be overridden) or a **custom line** (`description`, `hsnCode`, `unitPrice`, `gstRate`).
 
 Errors are returned as ProblemDetails: 400 validation, 404 not found, 409 conflict (such as a duplicate invoice number), 422 business rule violated.
+
+### GST
+
+The seller's state is copied from the tenant onto each invoice when it is created, and the place of supply is the customer's state.
+
+| Seller state vs place of supply | Tax charged |
+|---|---|
+| Same | CGST + SGST, each half the rate |
+| Different | IGST at the full rate |
+
+Tax is rounded to 2 decimals (half away from zero) per line, and invoice totals are the sum of those rounded line amounts. The response carries `cgstAmount`, `sgstAmount`, `igstAmount` on each line and `taxableTotal`, `cgstTotal`, `sgstTotal`, `igstTotal`, `taxTotal`, `grandTotal` on the invoice. There is no whole-rupee round-off on the grand total. Valid rates are the slabs 0, 0.25, 3, 5, 12, 18 and 28 percent. Cess, reverse charge and e-invoicing are not implemented.
 
 MediatR is pinned to 12.5.0, the last release under the Apache licence (13 and later need a licence key in production).
 
