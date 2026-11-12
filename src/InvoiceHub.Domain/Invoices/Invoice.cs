@@ -67,6 +67,11 @@ public sealed class Invoice : AuditableEntity, ITenantOwned
     public decimal TaxTotal => CgstTotal + SgstTotal + IgstTotal;
     public decimal GrandTotal => TaxableTotal + TaxTotal;
 
+    /// <summary>Sum of the payments applied so far.</summary>
+    public decimal AmountPaid { get; private set; }
+
+    public decimal BalanceDue => GrandTotal - AmountPaid;
+
     public InvoiceLine AddLine(Product product, decimal quantity)
     {
         if (product is null)
@@ -106,6 +111,30 @@ public sealed class Invoice : AuditableEntity, ITenantOwned
             throw new DomainException("An invoice needs at least one line before it is issued.");
 
         Status = InvoiceStatus.Issued;
+    }
+
+    /// <summary>
+    /// Applies a payment. Only issued or partly paid invoices can be paid, and a payment cannot exceed the
+    /// balance due. The invoice becomes PartiallyPaid, or Paid when nothing is left to pay.
+    /// Needs the invoice lines loaded, because the balance comes from the line totals.
+    /// </summary>
+    public Payment RecordPayment(string eventId, decimal amount, string? reference, DateTime receivedAtUtc)
+    {
+        if (Status is not (InvoiceStatus.Issued or InvoiceStatus.PartiallyPaid))
+            throw new DomainException(Status == InvoiceStatus.Paid
+                ? "Invoice is already paid."
+                : "Only issued invoices can receive payments.");
+
+        Guard.Positive(amount, "Payment amount");
+        if (decimal.Round(amount, 2) != amount)
+            throw new DomainException("Payment amount can have at most 2 decimal places.");
+        if (amount > BalanceDue)
+            throw new DomainException($"Payment of {amount:0.00} is more than the balance due of {BalanceDue:0.00}.");
+
+        var payment = new Payment(TenantId, Id, eventId, amount, reference, receivedAtUtc);
+        AmountPaid += amount;
+        Status = AmountPaid >= GrandTotal ? InvoiceStatus.Paid : InvoiceStatus.PartiallyPaid;
+        return payment;
     }
 
     public void Cancel()
