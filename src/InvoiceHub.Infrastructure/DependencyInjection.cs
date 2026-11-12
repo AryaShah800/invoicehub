@@ -1,3 +1,4 @@
+using InvoiceHub.Application.Auth;
 using InvoiceHub.Infrastructure.Identity;
 using InvoiceHub.Infrastructure.Persistence;
 using InvoiceHub.Infrastructure.Persistence.Interceptors;
@@ -26,6 +27,10 @@ public static class DependencyInjection
                 .AddInterceptors(
                     sp.GetRequiredService<TenantWriteGuardInterceptor>(),
                     sp.GetRequiredService<AuditInterceptor>()));
+
+        services.AddSingleton(JwtOptions.Load(configuration));
+        services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
+        services.AddScoped<IAuthService, AuthService>();
 
         services
             .AddIdentityCore<ApplicationUser>(options =>
