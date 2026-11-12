@@ -1,3 +1,4 @@
+using InvoiceHub.Application.Abstractions;
 using InvoiceHub.Domain.Customers;
 using InvoiceHub.Domain.Invoices;
 using InvoiceHub.Domain.Products;
@@ -6,7 +7,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace InvoiceHub.Infrastructure.Persistence;
 
-public sealed class InvoiceHubDbContext(DbContextOptions<InvoiceHubDbContext> options) : DbContext(options)
+public sealed class InvoiceHubDbContext(
+    DbContextOptions<InvoiceHubDbContext> options,
+    ITenantProvider tenantProvider) : DbContext(options)
 {
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<Customer> Customers => Set<Customer>();

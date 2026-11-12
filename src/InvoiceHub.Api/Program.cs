@@ -1,7 +1,11 @@
+using InvoiceHub.Api.Tenancy;
+using InvoiceHub.Application.Abstractions;
 using InvoiceHub.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ITenantProvider, ClaimsTenantProvider>();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddControllers();
