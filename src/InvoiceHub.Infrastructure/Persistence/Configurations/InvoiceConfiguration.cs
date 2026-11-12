@@ -20,6 +20,8 @@ internal sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         builder.Property(i => i.Notes).HasMaxLength(Invoice.NotesMaxLength);
         builder.Property(i => i.Status).HasConversion<string>().HasMaxLength(20);
         builder.Property(i => i.RowVersion).IsRowVersion();
+        builder.Property(i => i.AmountPaid).HasPrecision(18, 2);
+        builder.Ignore(i => i.BalanceDue);
         builder.Ignore(i => i.TaxableTotal);
         builder.Ignore(i => i.CgstTotal);
         builder.Ignore(i => i.SgstTotal);

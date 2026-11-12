@@ -34,7 +34,9 @@ public sealed record InvoiceDto(
     decimal SgstTotal,
     decimal IgstTotal,
     decimal TaxTotal,
-    decimal GrandTotal);
+    decimal GrandTotal,
+    decimal AmountPaid,
+    decimal BalanceDue);
 
 internal static class InvoiceMapping
 {
@@ -62,5 +64,7 @@ internal static class InvoiceMapping
         invoice.SgstTotal,
         invoice.IgstTotal,
         invoice.TaxTotal,
-        invoice.GrandTotal);
+        invoice.GrandTotal,
+        invoice.AmountPaid,
+        invoice.BalanceDue);
 }
