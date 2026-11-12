@@ -1,0 +1,44 @@
+## .NET / Visual Studio
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.swp
+.idea/
+.vscode/
+
+## Build and test output
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ll]og/
+[Ll]ogs/
+TestResults/
+BenchmarkDotNet.Artifacts/
+*.log
+publish/
+PublishScripts/
+*.nupkg
+*.snupkg
+.dotnet/
+
+## Secrets and local config (never commit)
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+*.pfx
+.env
+.env.*
+
+## Local databases
+*.mdf
+*.ldf
+*.bak
+
+## OS
+.DS_Store
+Thumbs.db
