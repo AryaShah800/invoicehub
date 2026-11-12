@@ -12,7 +12,7 @@ namespace InvoiceHub.Infrastructure.Persistence.Migrations
         {
             // COUNT(DISTINCT i.Id) made SQL Server spill to a worktable. Summing per invoice and slab first
             // and then counting those rows gives the same numbers in about half the time (measured on 100k invoices).
-            migrationBuilder.Sql(@"
+            migrationBuilder.Sql(Exec(@"
 CREATE OR ALTER PROCEDURE dbo.usp_GstSummaryReport
     @TenantId uniqueidentifier,
     @FromDate date,
@@ -47,13 +47,13 @@ BEGIN
     ) x
     GROUP BY x.GstRate
     ORDER BY x.GstRate;
-END");
+END"));
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql(@"
+            migrationBuilder.Sql(Exec(@"
 CREATE OR ALTER PROCEDURE dbo.usp_GstSummaryReport
     @TenantId uniqueidentifier,
     @FromDate date,
@@ -78,7 +78,13 @@ BEGIN
       AND i.Status IN ('Issued', 'PartiallyPaid', 'Paid')
     GROUP BY l.GstRate
     ORDER BY l.GstRate;
-END");
+END"));
         }
+
+        /// <summary>
+        /// CREATE PROCEDURE must be the first statement in its batch, but an idempotent migration script wraps
+        /// each migration in an IF block. Running the DDL through EXEC makes it valid in both cases.
+        /// </summary>
+        private static string Exec(string sql) => "EXEC(N'" + sql.Replace("'", "''") + "')";
     }
 }

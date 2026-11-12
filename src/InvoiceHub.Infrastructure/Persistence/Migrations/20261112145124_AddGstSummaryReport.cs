@@ -18,7 +18,7 @@ namespace InvoiceHub.Infrastructure.Persistence.Migrations
 
             // GST collected per slab for invoices issued in a date range. Draft and cancelled invoices are
             // excluded. Called from Dapper, which skips the EF tenant filters, so @TenantId is mandatory.
-            migrationBuilder.Sql(@"
+            migrationBuilder.Sql(Exec(@"
 CREATE OR ALTER PROCEDURE dbo.usp_GstSummaryReport
     @TenantId uniqueidentifier,
     @FromDate date,
@@ -43,7 +43,7 @@ BEGIN
       AND i.Status IN ('Issued', 'PartiallyPaid', 'Paid')
     GROUP BY l.GstRate
     ORDER BY l.GstRate;
-END");
+END"));
         }
 
         /// <inheritdoc />
@@ -55,5 +55,11 @@ END");
                 name: "IX_Invoices_TenantId_IssueDate",
                 table: "Invoices");
         }
+
+        /// <summary>
+        /// CREATE PROCEDURE must be the first statement in its batch, but an idempotent migration script wraps
+        /// each migration in an IF block. Running the DDL through EXEC makes it valid in both cases.
+        /// </summary>
+        private static string Exec(string sql) => "EXEC(N'" + sql.Replace("'", "''") + "')";
     }
 }
