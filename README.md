@@ -24,7 +24,7 @@ tests/
 ## Roadmap
 
 - [x] Solution skeleton, domain entities, first migration
-- [ ] Multi-tenancy with EF Core global query filters
+- [x] Multi-tenancy with EF Core global query filters
 - [ ] Identity, JWT, policy-based authorization
 - [ ] CQRS with MediatR and FluentValidation
 - [ ] GST calculation (CGST/SGST vs IGST)
