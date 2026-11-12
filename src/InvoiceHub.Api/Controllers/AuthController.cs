@@ -1,7 +1,9 @@
 using InvoiceHub.Api.Auth;
+using InvoiceHub.Api.RateLimiting;
 using InvoiceHub.Application.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace InvoiceHub.Api.Controllers;
 
@@ -12,6 +14,7 @@ public sealed class AuthController(IAuthService auth) : ControllerBase
     /// <summary>Registers a new business (tenant) and its first user, who becomes the tenant Admin.</summary>
     [HttpPost("register")]
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status201Created)]
     public async Task<IActionResult> Register(RegisterTenantRequest request, CancellationToken ct)
     {
@@ -21,6 +24,7 @@ public sealed class AuthController(IAuthService auth) : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Login(LoginRequest request, CancellationToken ct)
     {

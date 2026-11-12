@@ -1,9 +1,11 @@
 using System.Text.Json;
+using InvoiceHub.Api.RateLimiting;
 using InvoiceHub.Api.Webhooks;
 using InvoiceHub.Application.Payments;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace InvoiceHub.Api.Controllers;
 
@@ -17,6 +19,7 @@ public sealed record PaymentWebhookPayload(string? EventId, Guid InvoiceId, deci
 [ApiController]
 [Route("api/webhooks/payments")]
 [AllowAnonymous]
+[EnableRateLimiting(RateLimitPolicies.Webhook)]
 public sealed class PaymentWebhookController(
     ISender sender,
     PaymentWebhookOptions options,
