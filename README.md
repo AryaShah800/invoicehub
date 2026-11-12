@@ -28,7 +28,7 @@ tests/
 - [x] Identity, JWT, policy-based authorization
 - [x] CQRS with MediatR and FluentValidation
 - [x] GST calculation (CGST/SGST vs IGST)
-- [ ] Dapper stored procedure for GST reports (with benchmark)
+- [x] Dapper stored procedure for GST reports (with benchmark)
 - [ ] Payment webhook (HMAC) and SignalR updates
 - [ ] Unit and integration tests
 - [ ] Serilog, CI pipeline, Azure deployment
@@ -98,6 +98,19 @@ The seller's state is copied from the tenant onto each invoice when it is create
 Tax is rounded to 2 decimals (half away from zero) per line, and invoice totals are the sum of those rounded line amounts. The response carries `cgstAmount`, `sgstAmount`, `igstAmount` on each line and `taxableTotal`, `cgstTotal`, `sgstTotal`, `igstTotal`, `taxTotal`, `grandTotal` on the invoice. There is no whole-rupee round-off on the grand total. Valid rates are the slabs 0, 0.25, 3, 5, 12, 18 and 28 percent. Cess, reverse charge and e-invoicing are not implemented.
 
 MediatR is pinned to 12.5.0, the last release under the Apache licence (13 and later need a licence key in production).
+
+## GST report
+
+`GET /api/reports/gst-summary?from=2026-04-01&to=2026-04-30` (Admin only) returns the GST collected per slab for invoices issued in the range: invoice count, taxable value, CGST, SGST, IGST, plus totals. Draft and cancelled invoices are left out.
+
+It is served by the `usp_GstSummaryReport` stored procedure, called with Dapper. Dapper does not apply the EF Core tenant query filters, so the procedure takes the tenant id as a required parameter and the tests check that other tenants' invoices never appear. An EF Core version of the same query is kept as a reference: the tests check that both return identical rows, and the benchmark compares them.
+
+**Benchmark** (100,000 invoices, LocalDB, one run): the stored procedure was 29% to 45% faster than the first EF Core query, but an EF Core query written with the same shape came within 3% to 5% of it. Most of the gain came from avoiding `COUNT(DISTINCT)`, not from Dapper. Full table, method and caveats are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md).
+
+```bash
+dotnet run -c Release --project benchmarks/InvoiceHub.Benchmarks -- seed    # about 90 seconds
+dotnet run -c Release --project benchmarks/InvoiceHub.Benchmarks -- bench   # several minutes
+```
 
 ## Tests
 
