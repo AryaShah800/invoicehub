@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\InvoiceHub.Domain\InvoiceHub.Domain.csproj" />
     <ProjectReference Include="..\..\src\InvoiceHub.Application\InvoiceHub.Application.csproj" />
+    <ProjectReference Include="..\..\src\InvoiceHub.Infrastructure\InvoiceHub.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

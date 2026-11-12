@@ -1,4 +1,5 @@
 using InvoiceHub.Application.Abstractions;
+using InvoiceHub.Application.Auth;
 
 namespace InvoiceHub.Api.Tenancy;
 
@@ -8,7 +9,7 @@ namespace InvoiceHub.Api.Tenancy;
 /// </summary>
 public sealed class ClaimsTenantProvider(IHttpContextAccessor httpContextAccessor) : ITenantProvider
 {
-    public const string ClaimType = "tenant_id";
+    public const string ClaimType = AppClaims.TenantId;
 
     public Guid? TenantId
     {
