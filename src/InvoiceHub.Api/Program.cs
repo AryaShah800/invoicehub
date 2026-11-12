@@ -1,5 +1,6 @@
 using InvoiceHub.Api.Auth;
 using InvoiceHub.Api.Errors;
+using InvoiceHub.Api.Hubs;
 using InvoiceHub.Api.Tenancy;
 using InvoiceHub.Application;
 using InvoiceHub.Application.Abstractions;
@@ -23,6 +24,8 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IPaymentNotifier, SignalRPaymentNotifier>();
 
 var jwt = JwtOptions.Load(builder.Configuration);
 builder.Services
@@ -43,6 +46,19 @@ builder.Services
             ClockSkew = TimeSpan.FromSeconds(30),
             NameClaimType = "sub",
             RoleClaimType = AppClaims.Role,
+        };
+
+        // Browsers cannot set an Authorization header on a WebSocket, so SignalR sends the token as
+        // ?access_token=. It is accepted only for the hub path; every other endpoint needs the header.
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var token = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(token) && context.HttpContext.Request.Path.StartsWithSegments(InvoiceEventsHub.Path))
+                    context.Token = token;
+                return Task.CompletedTask;
+            },
         };
     });
 
@@ -84,6 +100,7 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<InvoiceEventsHub>(InvoiceEventsHub.Path);
 
 app.Run();
 
