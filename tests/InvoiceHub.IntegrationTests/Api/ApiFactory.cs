@@ -1,4 +1,6 @@
 using InvoiceHub.Infrastructure.Persistence;
+using InvoiceHub.Infrastructure.Persistence.Interceptors;
+using InvoiceHub.IntegrationTests.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -16,12 +18,29 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     private static readonly string[] EnvironmentKeys = ["ConnectionStrings__InvoiceHub", "Jwt__SigningKey"];
 
+    private readonly string _connectionString;
+
     public ApiFactory()
     {
         var database = $"InvoiceHub_Api_Test_{Guid.NewGuid():N}";
-        Environment.SetEnvironmentVariable("ConnectionStrings__InvoiceHub",
-            $"Server=(localdb)\\MSSQLLocalDB;Database={database};Trusted_Connection=True;TrustServerCertificate=True");
+        _connectionString =
+            $"Server=(localdb)\\MSSQLLocalDB;Database={database};Trusted_Connection=True;TrustServerCertificate=True";
+        Environment.SetEnvironmentVariable("ConnectionStrings__InvoiceHub", _connectionString);
         Environment.SetEnvironmentVariable("Jwt__SigningKey", SigningKey);
+    }
+
+    /// <summary>
+    /// A context scoped to one tenant, for seeding data that has no endpoint yet. It enforces the same
+    /// tenant rules as the API, so a test cannot accidentally write across tenants.
+    /// </summary>
+    public InvoiceHubDbContext CreateDbContext(Guid tenantId)
+    {
+        var tenant = new FakeTenantProvider { TenantId = tenantId };
+        var options = new DbContextOptionsBuilder<InvoiceHubDbContext>()
+            .UseSqlServer(_connectionString)
+            .AddInterceptors(new TenantWriteGuardInterceptor(tenant), new AuditInterceptor(TimeProvider.System))
+            .Options;
+        return new InvoiceHubDbContext(options, tenant);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder) => builder.UseEnvironment("Development");
