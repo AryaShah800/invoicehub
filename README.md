@@ -29,7 +29,7 @@ tests/
 - [x] CQRS with MediatR and FluentValidation
 - [x] GST calculation (CGST/SGST vs IGST)
 - [x] Dapper stored procedure for GST reports (with benchmark)
-- [ ] Payment webhook (HMAC) and SignalR updates
+- [x] Payment webhook (HMAC) and SignalR updates
 - [ ] Unit and integration tests
 - [ ] Serilog, CI pipeline, Azure deployment
 
@@ -44,6 +44,14 @@ dotnet user-secrets set "Jwt:SigningKey" "<a long random string>" --project src/
 ```
 
 In other environments use the `Jwt__SigningKey` environment variable.
+
+The payment webhook has its own shared secret, also never committed and also at least 32 characters. The API refuses to start without it:
+
+```bash
+dotnet user-secrets set "PaymentWebhook:Secret" "<a different long random string>" --project src/InvoiceHub.Api
+```
+
+In other environments use `PaymentWebhook__Secret`.
 
 ```bash
 dotnet build
@@ -80,6 +88,7 @@ There are no list, update or delete endpoints yet.
 | Endpoint | Purpose |
 |---|---|
 | `POST /api/invoices` | Create a draft invoice for one of your customers |
+| `POST /api/invoices/{id}/issue` | Issue a draft invoice. It then cannot be edited and can receive payments |
 | `GET /api/invoices/{id}` | Get an invoice with its lines (another tenant's invoice is a 404) |
 
 Requests are MediatR commands and queries. A pipeline behavior runs the FluentValidation validators before the handler, so handlers only see valid input. An invoice line is either a **catalogue line** (`productId` plus `quantity`; price, HSN code and GST rate come from the product and cannot be overridden) or a **custom line** (`description`, `hsnCode`, `unitPrice`, `gstRate`).
@@ -98,6 +107,61 @@ The seller's state is copied from the tenant onto each invoice when it is create
 Tax is rounded to 2 decimals (half away from zero) per line, and invoice totals are the sum of those rounded line amounts. The response carries `cgstAmount`, `sgstAmount`, `igstAmount` on each line and `taxableTotal`, `cgstTotal`, `sgstTotal`, `igstTotal`, `taxTotal`, `grandTotal` on the invoice. There is no whole-rupee round-off on the grand total. Valid rates are the slabs 0, 0.25, 3, 5, 12, 18 and 28 percent. Cess, reverse charge and e-invoicing are not implemented.
 
 MediatR is pinned to 12.5.0, the last release under the Apache licence (13 and later need a licence key in production).
+
+## Payments
+
+`POST /api/webhooks/payments` is how a payment provider reports a payment. There is no signed-in user, so the request is authenticated by an **HMAC-SHA256 signature** instead of a JWT.
+
+| Header | Value |
+|---|---|
+| `X-Payment-Timestamp` | Unix time in seconds when the request was signed |
+| `X-Payment-Signature` | `sha256=` plus the lower-case hex HMAC-SHA256, keyed with the shared secret, of the text `{timestamp}.{raw request body}` |
+
+Body: `{ "eventId": "evt_123", "invoiceId": "<guid>", "amount": 500.00, "currency": "INR", "reference": "UPI-REF" }`.
+
+| Response | Meaning |
+|---|---|
+| 200 | Payment applied. A retried event also gets 200 with `"duplicate": true` and changes nothing |
+| 400 | Malformed JSON or invalid field (no event id, amount not positive or with more than 2 decimals, currency not INR) |
+| 401 | Missing, wrong or stale signature. The timestamp must be within 5 minutes of the server clock, so a captured request cannot be replayed later |
+| 404 | Unknown invoice |
+| 409 | Event id already used for another invoice, or the invoice changed at the same moment (retry) |
+| 413 | Body over 64 KB |
+| 422 | Not payable: draft, cancelled, already paid, or more than the balance due |
+
+How it is built:
+
+- The signature is checked over the exact bytes received, with a constant-time comparison.
+- Money is applied by `Invoice.RecordPayment`: partly paid invoices become `PartiallyPaid`, and `Paid` once the balance reaches zero. A payment cannot exceed the balance due.
+- Each event id is stored with a unique index per tenant, so a duplicate delivery, even two arriving at the same moment, is applied once. Invoices also carry a row version, so simultaneous different payments cannot overwrite each other.
+- With no user, the tenant comes from the invoice. The webhook looks the invoice up across tenants once, reading only its tenant id, then continues under the normal tenant filters. Any user token sent with the request is ignored.
+
+To send a test request from PowerShell (set `$secret` and `$invoiceId` first):
+
+```powershell
+$ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+$body = '{"eventId":"evt_1","invoiceId":"' + $invoiceId + '","amount":500.00,"currency":"INR"}'
+$hmac = [System.Security.Cryptography.HMACSHA256]::new([Text.Encoding]::UTF8.GetBytes($secret))
+$sig = 'sha256=' + (($hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes("$ts.$body")) | ForEach-Object { $_.ToString('x2') }) -join '')
+Invoke-RestMethod -Method Post -Uri http://localhost:<port>/api/webhooks/payments -Body $body -ContentType 'application/json' `
+  -Headers @{ 'X-Payment-Timestamp' = "$ts"; 'X-Payment-Signature' = $sig }
+```
+
+There is no real payment provider behind this: the endpoint defines the contract above and is tested against it. Connecting Razorpay or similar would mean adapting their signature scheme and payload.
+
+### Live updates (SignalR)
+
+After a payment is saved, the API pushes a `PaymentReceived` message to every connected client of that tenant, and to nobody else. Connect to `/hubs/invoices` with the same JWT you use for the REST API (any role). Browsers cannot set headers on a WebSocket, so the token can go in the `access_token` query string, which the API accepts for the hub path only.
+
+```js
+const connection = new signalR.HubConnectionBuilder()
+  .withUrl("/hubs/invoices", { accessTokenFactory: () => token })
+  .build();
+connection.on("PaymentReceived", m => console.log(m.invoiceNumber, m.amount, m.balanceDue, m.invoiceStatus));
+await connection.start();
+```
+
+The message carries `invoiceId`, `invoiceNumber`, `eventId`, `amount`, `amountPaid`, `balanceDue`, `invoiceStatus` and `receivedAtUtc`. Each connection joins the group `tenant:{tenantId}` from its token's `tenant_id` claim. A failed push is logged but does not fail the webhook, because the payment is already saved.
 
 ## GST report
 
