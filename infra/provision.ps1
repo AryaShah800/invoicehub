@@ -31,7 +31,7 @@ param(
     [string]$Prefix,
 
     # Azure for Students subscriptions can restrict regions. If creation fails with a policy error, try another region.
-    [string]$Location = 'centralindia',
+    [string]$Location = 'eastasia',
 
     [string]$SqlAdminUser = 'invoicehubadmin',
 
