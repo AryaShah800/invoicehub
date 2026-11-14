@@ -1,5 +1,7 @@
 # InvoiceHub
 
+[![CI](https://github.com/AryaShah800/invoicehub/actions/workflows/ci.yml/badge.svg)](https://github.com/AryaShah800/invoicehub/actions/workflows/ci.yml)
+
 Multi-tenant GST invoicing REST API built with ASP.NET Core (.NET 8). Businesses register, add customers and products, raise GST-correct invoices (CGST + SGST within a state, IGST across states), receive payments through an HMAC-signed webhook, and get live updates over SignalR.
 
 ## Status
@@ -7,10 +9,11 @@ Multi-tenant GST invoicing REST API built with ASP.NET Core (.NET 8). Businesses
 | Area | State |
 |---|---|
 | API, multi-tenancy, auth, invoices, GST, reports, payments webhook, SignalR | Built and tested (`dotnet test`) |
-| CI pipeline ([azure-pipelines.yml](azure-pipelines.yml)) | Written. Its steps were rehearsed locally. **It has not yet run on Azure DevOps** |
+| GitHub Actions CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) | Runs on every push and pull request to `main`: build (warnings are errors), vulnerable-package check, all unit and integration tests on `windows-latest` with LocalDB |
+| Azure DevOps pipeline ([azure-pipelines.yml](azure-pipelines.yml)) | Written. Its steps were rehearsed locally. **It has not yet run on Azure DevOps** |
 | Azure resources ([infra/provision.ps1](infra/provision.ps1)) | Written and syntax-checked. **Not yet run against Azure** |
 | Live deployment | **Not deployed yet.** There is no public URL |
-| Moq and FluentAssertions based unit tests | Not written yet. Tests use xUnit assertions only |
+| Tests | 199 xUnit test methods, 240 test cases with theory data (110 unit, 130 integration). Unit tests use Moq and FluentAssertions |
 
 ## Tech stack
 
@@ -268,4 +271,5 @@ Not verified: the pipeline running on Azure DevOps, `infra/provision.ps1` agains
 - [x] Serilog, health checks, rate limiting, HSTS
 - [x] CI/CD pipeline and Azure provisioning script (written, not yet run on Azure)
 - [ ] First deployment to Azure and a public URL
-- [ ] Unit tests with Moq and FluentAssertions
+- [x] Unit tests with Moq and FluentAssertions
+- [x] GitHub Actions CI: build and test on every push
