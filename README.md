@@ -45,6 +45,23 @@ Choices worth knowing about:
 - **`IApplicationDbContext` exposes EF `DbSet`s,** so the Application project references EF Core (without a database provider). This is a pragmatic choice over wrapping everything in repositories.
 - **Money rules live in the domain,** not in controllers: GST split, rounding, payment application and invoice status changes.
 
+## Run it with one command (Docker)
+
+Needs Docker only (no .NET SDK, no LocalDB, works on Windows, macOS with amd64 emulation, Linux).
+
+```bash
+cp .env.example .env        # then edit the secrets if you like
+docker compose up --build
+```
+
+This starts SQL Server 2022 (`mcr.microsoft.com/mssql/server:2022-latest`), the API (migrations run on start), and a one-shot `seed` service that creates demo data through the public API: 4 customers (one in the seller's state, so CGST+SGST, three in other states, so IGST), 5 products and 60 invoices over about 11 months.
+
+- Swagger UI: http://localhost:8088/swagger (change the port with `API_PORT` in `.env`)
+- Health: http://localhost:8088/health/ready
+- Demo login (demo data only, set in `.env.example`): `demo@invoicehub.example` / `Demo#Pass2026`. Call `POST /api/auth/login`, paste the token into Swagger's Authorize button, then try `GET /api/reports/gst-summary?from=2025-01-01&to=2027-01-01`.
+
+Stop and delete the data with `docker compose down -v`. Secrets come from the git-ignored `.env`; the API still refuses to start without them.
+
 ## PDF invoices
 
 `GET /api/invoices/{id}/pdf` returns a GST tax invoice as a PDF (seller and buyer GSTIN, HSN per line, CGST + SGST or IGST by place of supply, totals, balance due and the grand total in words using lakh/crore). Another tenant's invoice is a 404, like every other read.
