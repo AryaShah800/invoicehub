@@ -17,6 +17,7 @@ internal sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         builder.Property(i => i.InvoiceNumber).HasColumnType("varchar(16)").IsRequired();
         builder.Property(i => i.SellerStateCode).HasColumnType("char(2)").IsRequired();
         builder.Property(i => i.PlaceOfSupplyStateCode).HasColumnType("char(2)").IsRequired();
+        builder.Property(i => i.OverdueMarkedOn).HasColumnType("date");
         builder.Property(i => i.Notes).HasMaxLength(Invoice.NotesMaxLength);
         builder.Property(i => i.Status).HasConversion<string>().HasMaxLength(20);
         builder.Property(i => i.RowVersion).IsRowVersion();

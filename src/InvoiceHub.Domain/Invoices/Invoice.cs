@@ -56,6 +56,12 @@ public sealed class Invoice : AuditableEntity, ITenantOwned
     public bool IsIntraState => SellerStateCode == PlaceOfSupplyStateCode;
 
     public string? Notes { get; private set; }
+
+    /// <summary>
+    /// The day the overdue job first noticed this invoice past its due date while still unpaid. It is set once,
+    /// so the job tells the customer's business about each overdue invoice a single time.
+    /// </summary>
+    public DateOnly? OverdueMarkedOn { get; private set; }
     public byte[] RowVersion { get; private set; } = [];
 
     public IReadOnlyCollection<InvoiceLine> Lines => _lines.AsReadOnly();
@@ -135,6 +141,19 @@ public sealed class Invoice : AuditableEntity, ITenantOwned
         AmountPaid += amount;
         Status = AmountPaid >= GrandTotal ? InvoiceStatus.Paid : InvoiceStatus.PartiallyPaid;
         return payment;
+    }
+
+    /// <summary>
+    /// Records that the invoice is past due. Returns true the first time it applies and false on every later call,
+    /// or when the invoice is paid, cancelled, still a draft or not yet past its due date.
+    /// </summary>
+    public bool MarkOverdue(DateOnly today)
+    {
+        if (OverdueMarkedOn is not null || Status is not (InvoiceStatus.Issued or InvoiceStatus.PartiallyPaid) || DueDate >= today)
+            return false;
+
+        OverdueMarkedOn = today;
+        return true;
     }
 
     public void Cancel()

@@ -14,7 +14,7 @@ Multi-tenant GST invoicing REST API built with ASP.NET Core (.NET 8). Businesses
 | Azure resources ([infra/provision.ps1](infra/provision.ps1)) | Written and syntax-checked. **Not yet run against Azure** |
 | Live deployment | **Not deployed yet.** There is no public URL |
 | Web UI (Blazor Server, `src/InvoiceHub.Web`) | Built: login, dashboard, invoice list and detail, create invoice, live payment toast |
-| Tests | `dotnet test` on this branch: 331 passed, 1 skipped (122 unit, 154 API integration, 55 UI component tests, 1 browser smoke test that runs only when `E2E_WEB_URL` is set). Unit tests use Moq and FluentAssertions, UI tests use bUnit |
+| Tests | `dotnet test` on this branch: 360 passed, 1 skipped (138 unit, 167 API integration, 55 UI component tests, 1 browser smoke test that runs only when `E2E_WEB_URL` is set). Unit tests use Moq and FluentAssertions, UI tests use bUnit |
 
 ## Tech stack
 
@@ -121,6 +121,7 @@ The default connection string in `src/InvoiceHub.Api/appsettings.json` points at
 | `PaymentWebhook:ToleranceSeconds` | How far a webhook timestamp may be from the server clock | 300 |
 | `RateLimiting:AuthPermitsPerMinute` | Register and login requests per client address per minute | 10 |
 | `RateLimiting:WebhookPermitsPerMinute` | Webhook requests per client address per minute | 300 |
+| `BackgroundJobs:Enabled`, `IntervalMinutes`, `UtcOffsetMinutes` | The overdue and recurring-invoice job: on or off, how often it wakes, and the business time zone that decides what "today" is | `true`, 60, 330 (India) |
 | `Serilog:*` | Log levels and sinks | console plus rolling JSON file in `logs/` |
 | `AllowedHosts` | Host names the app answers to | `*` (set it in production) |
 
@@ -224,6 +225,20 @@ await connection.start();
 ```
 
 The message carries `invoiceId`, `invoiceNumber`, `eventId`, `amount`, `amountPaid`, `balanceDue`, `invoiceStatus` and `receivedAtUtc`. Each connection joins the group `tenant:{tenantId}` from its token's `tenant_id` claim. A failed push is logged but does not fail the webhook, because the payment is already saved.
+
+## Background jobs
+
+A hosted service (`InvoiceMaintenanceWorker`) wakes every `BackgroundJobs:IntervalMinutes` and, for each active tenant:
+
+1. **Flags overdue invoices.** An issued or part-paid invoice past its due date gets `OverdueMarkedOn` set the first time the job sees it, and a SignalR `InvoiceOverdue` event goes to that tenant's connected clients. It is set once, so the same invoice is never announced twice.
+2. **Raises recurring invoices.** `POST /api/recurring-invoices` stores a template (customer, products and quantities, every 1 to 12 months, first run date, optional end date, days until due). When a template's next run date has arrived, the job creates and issues one invoice per due occurrence (a template that was paused for months catches up at most 12 per run), moves the template to its next date, and sends `RecurringInvoiceGenerated`. `POST /api/recurring-invoices/{id}/pause` stops a template.
+
+Design notes:
+
+- **Idempotent.** Each occurrence has a deterministic invoice number (`R` + 6 hex characters of the template id + `-yyMMdd`), unique per tenant. Running the job twice, or two instances at once, cannot create the same invoice twice, and a crash between saving the invoice and moving the template forward is repaired on the next run. Templates carry a row version for the same reason.
+- **Testable time.** The logic lives in `InvoiceMaintenanceService` (Application project) and takes the date as an argument; the worker only decides what "today" is from an injected `TimeProvider` and `BackgroundJobs:UtcOffsetMinutes`. Tests run it for chosen dates and never depend on the wall clock.
+- **Tenant scope without a user.** There is no signed-in user in a background service, so each unit of work gets its own DI scope with the tenant assigned first. The tenant query filters and the write guard stay in force, and a failing tenant or template is logged and skipped without stopping the rest.
+- **Pluggable notifier.** `IInvoiceEventNotifier` is implemented with SignalR today. An email or SMS implementation can be added without touching the job.
 
 ## GST report
 
