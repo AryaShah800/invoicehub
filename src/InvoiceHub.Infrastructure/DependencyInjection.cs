@@ -16,20 +16,20 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("InvoiceHub")
-            ?? throw new InvalidOperationException("Connection string 'InvoiceHub' is not configured.");
+        var provider = DatabaseProviderConfiguration.Read(configuration);
+        var connectionString = DatabaseProviderConfiguration.ReadConnectionString(configuration, provider);
 
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<AuditInterceptor>();
         services.AddScoped<TenantWriteGuardInterceptor>();
 
         services.AddDbContext<InvoiceHubDbContext>((sp, options) =>
-            options
-                .UseSqlServer(connectionString, sql =>
-                    sql.MigrationsAssembly(typeof(InvoiceHubDbContext).Assembly.FullName))
-                .AddInterceptors(
-                    sp.GetRequiredService<TenantWriteGuardInterceptor>(),
-                    sp.GetRequiredService<AuditInterceptor>()));
+            DatabaseProviderConfiguration.Configure(
+                options, provider, connectionString,
+                sp.GetRequiredService<TenantWriteGuardInterceptor>(),
+                sp.GetRequiredService<AuditInterceptor>()));
+
+        services.AddSingleton<InvoiceHub.Infrastructure.Demo.DemoDataSeeder>();
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<InvoiceHubDbContext>());
 

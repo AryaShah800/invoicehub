@@ -33,6 +33,18 @@ public sealed class InvoiceHubDbContext(
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(InvoiceHubDbContext).Assembly);
         ApplyTenantFilters(modelBuilder);
+        if (Database.IsSqlite())
+            UseApplicationManagedConcurrencyTokens(modelBuilder);
+    }
+
+    /// <summary>
+    /// SQLite cannot generate a rowversion. Keep the same column but make it an ordinary required concurrency token
+    /// that SqliteConcurrencyTokenInterceptor sets on every save. The SQL Server model is not touched.
+    /// </summary>
+    private static void UseApplicationManagedConcurrencyTokens(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Invoice>().Property(i => i.RowVersion).IsRequired().IsConcurrencyToken().ValueGeneratedNever();
+        modelBuilder.Entity<RecurringInvoice>().Property(r => r.RowVersion).IsRequired().IsConcurrencyToken().ValueGeneratedNever();
     }
 
     /// <summary>
