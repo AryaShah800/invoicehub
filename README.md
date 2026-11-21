@@ -14,7 +14,7 @@ Multi-tenant GST invoicing REST API built with ASP.NET Core (.NET 8). Businesses
 | GitHub Actions CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) | Runs on every push and pull request to `main`: build (warnings are errors), vulnerable-package check, all unit and integration tests on `windows-latest` with LocalDB |
 | Azure DevOps pipeline ([azure-pipelines.yml](azure-pipelines.yml)) | Written. Its steps were rehearsed locally. **It has not yet run on Azure DevOps** |
 | Azure resources ([infra/provision.ps1](infra/provision.ps1)) | Written and syntax-checked. **Not yet run against Azure** |
-| Live deployment | **Not deployed yet.** There is no public URL |
+| Live deployment | Free hosted demo on Render (SQLite build, data resets): https://invoicehub-q7z9.onrender.com. See [Hosted demo](#hosted-demo) |
 | Web UI (Blazor Server, `src/InvoiceHub.Web`) | Built: login, dashboard, invoice list and detail, create invoice, live payment toast |
 | Tests | `dotnet test` on this branch (Release, run just before this README edit): 360 passed, 1 skipped (138 unit, 167 API integration, 55 UI component tests; the 1 skipped is the browser smoke test, which runs only when `E2E_WEB_URL` is set). Unit tests use Moq and FluentAssertions, UI tests use bUnit |
 
