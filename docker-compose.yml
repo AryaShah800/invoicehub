@@ -5,7 +5,7 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?missing .env: run cp .env.example .env and set the values}
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?missing .env - copy .env.example to .env and set the values}
     volumes:
       - sqldata:/var/opt/mssql
     healthcheck:
@@ -28,8 +28,8 @@ services:
       Https__RedirectDisabled: "true"
       Database__MigrateOnStartup: "true"
       ConnectionStrings__InvoiceHub: Server=db;Database=InvoiceHub;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=true
-      Jwt__SigningKey: ${JWT_SIGNING_KEY:?missing .env: run cp .env.example .env and set the values}
-      PaymentWebhook__Secret: ${PAYMENT_WEBHOOK_SECRET:?missing .env: run cp .env.example .env and set the values}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?missing .env - copy .env.example to .env and set the values}
+      PaymentWebhook__Secret: ${PAYMENT_WEBHOOK_SECRET:?missing .env - copy .env.example to .env and set the values}
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080 && printf \"GET /health/ready HTTP/1.0\r\n\r\n\" >&3 && head -1 <&3 | grep -q 200'"]
       interval: 10s
