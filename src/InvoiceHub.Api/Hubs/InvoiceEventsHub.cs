@@ -1,4 +1,5 @@
 using InvoiceHub.Api.Auth;
+using InvoiceHub.Application.Abstractions;
 using InvoiceHub.Application.Auth;
 using InvoiceHub.Application.Payments;
 using Microsoft.AspNetCore.Authorization;
@@ -10,6 +11,10 @@ namespace InvoiceHub.Api.Hubs;
 public interface IInvoiceClient
 {
     Task PaymentReceived(PaymentReceivedMessage message);
+
+    Task InvoiceOverdue(InvoiceOverdueMessage message);
+
+    Task RecurringInvoiceGenerated(RecurringInvoiceGeneratedMessage message);
 }
 
 /// <summary>

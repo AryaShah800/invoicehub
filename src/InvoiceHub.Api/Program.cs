@@ -41,7 +41,13 @@ builder.Services.AddSingleton(PaymentWebhookOptions.Load(builder.Configuration))
 builder.Services.AddApiRateLimiting(builder.Configuration);
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database", tags: ["ready"]);
 builder.Services.AddSignalR();
-builder.Services.AddSingleton<IPaymentNotifier, SignalRPaymentNotifier>();
+builder.Services.AddSingleton<SignalRPaymentNotifier>();
+builder.Services.AddSingleton<IPaymentNotifier>(sp => sp.GetRequiredService<SignalRPaymentNotifier>());
+builder.Services.AddSingleton<IInvoiceEventNotifier>(sp => sp.GetRequiredService<SignalRPaymentNotifier>());
+builder.Services.AddScoped<InvoiceHub.Application.Maintenance.InvoiceMaintenanceService>();
+builder.Services.Configure<InvoiceHub.Api.Jobs.BackgroundJobOptions>(builder.Configuration.GetSection(InvoiceHub.Api.Jobs.BackgroundJobOptions.Section));
+builder.Services.AddSingleton<InvoiceHub.Api.Jobs.InvoiceMaintenanceWorker>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<InvoiceHub.Api.Jobs.InvoiceMaintenanceWorker>());
 
 var jwt = JwtOptions.Load(builder.Configuration);
 builder.Services

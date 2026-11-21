@@ -26,6 +26,7 @@ public sealed class InvoiceHubDbContext(
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<RecurringInvoice> RecurringInvoices => Set<RecurringInvoice>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
