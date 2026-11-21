@@ -82,3 +82,5 @@ jobs:
         run: cp .env.example .env && docker compose config >/dev/null
       - name: Build image (no push)
         run: docker build -t invoicehub-api:ci .
+      - name: Build web UI image (no push)
+        run: docker build -f Dockerfile.web -t invoicehub-web:ci .

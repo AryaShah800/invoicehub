@@ -42,8 +42,8 @@ for back in 330 300 270 240 210 180 150 120 90 60 45 30 20 10 5; do
     body=$(jq -n --arg c "$cust" --arg no "DEMO-$(printf %04d $n)" --arg i "$issue" --arg d "$due" --arg pa "$pa" --arg pb "$p2" --arg pc "$p4" --argjson q $((n % 5 + 1)) \
       '{customerId:$c,invoiceNumber:$no,issueDate:$i,dueDate:$d,notes:"Demo invoice",lines:[{productId:$pa,quantity:$q},{productId:$pb,quantity:2},{productId:$pc,quantity:10}]}')
     id=$(post /api/invoices "$body" | jq -r .id)
-    # leave the newest few as drafts, issue the rest
-    if [ $back -gt 20 ]; then
+    # leave the newest as drafts, issue the rest
+    if [ $back -gt 5 ]; then
       total=$(post "/api/invoices/$id/issue" '{}' | jq -r .grandTotal)
       # older invoices are mostly paid (through the signed webhook, like a real provider), some part-paid, the rest stay open
       if [ $back -ge 60 ] && [ $((n % 4)) -ne 0 ]; then pay "$id" "$total"

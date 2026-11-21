@@ -13,7 +13,8 @@ Multi-tenant GST invoicing REST API built with ASP.NET Core (.NET 8). Businesses
 | Azure DevOps pipeline ([azure-pipelines.yml](azure-pipelines.yml)) | Written. Its steps were rehearsed locally. **It has not yet run on Azure DevOps** |
 | Azure resources ([infra/provision.ps1](infra/provision.ps1)) | Written and syntax-checked. **Not yet run against Azure** |
 | Live deployment | **Not deployed yet.** There is no public URL |
-| Tests | 199 xUnit test methods, 240 test cases with theory data (110 unit, 130 integration). Unit tests use Moq and FluentAssertions |
+| Web UI (Blazor Server, `src/InvoiceHub.Web`) | Built: login, dashboard, invoice list and detail, create invoice, live payment toast |
+| Tests | `dotnet test` on this branch: 331 passed, 1 skipped (122 unit, 154 API integration, 55 UI component tests, 1 browser smoke test that runs only when `E2E_WEB_URL` is set). Unit tests use Moq and FluentAssertions, UI tests use bUnit |
 
 ## Tech stack
 
@@ -53,6 +54,23 @@ Choices worth knowing about:
 
 [docs/sample-invoice.pdf](docs/sample-invoice.pdf) is a sample rendered from made-up data. PDFs are drawn with [QuestPDF](https://www.questpdf.com/), used under its **Community licence** (free for individuals and small organisations; `QuestPDF.Settings.License = LicenseType.Community` is set in `QuestPdfInvoiceRenderer`). It is not MIT, so check its licence terms before using this in a larger company. The rupee amounts print as "Rs" because the built-in PDF fonts have no rupee glyph.
 
+## Web UI
+
+A Blazor Server app (`src/InvoiceHub.Web`) that talks to the API over HTTP with the signed-in user's JWT. Screens: login, dashboard (overdue count and amount, outstanding, billed per month, GST split), invoice list with status, customer and date filters, invoice detail with PDF download, and a create-invoice form with validation. A SignalR connection to the API shows a toast the moment a payment webhook lands.
+
+| Dashboard | Invoices |
+|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Invoices](docs/screenshots/invoices.png) |
+| ![Invoice detail](docs/screenshots/invoice-detail.png) | ![Live payment toast](docs/screenshots/toast-payment.png) |
+
+Mobile layout: [docs/screenshots/dashboard-mobile.png](docs/screenshots/dashboard-mobile.png). The screenshots were taken from the compose demo in headless Edge.
+
+Run it: `docker compose up --build`, open http://localhost:8087 and sign in with the demo login below. Browser smoke test against the running stack (uses the Edge installed on your machine):
+
+```bash
+E2E_WEB_URL=http://localhost:8087 E2E_PASSWORD='<DEMO_PASSWORD from .env>' dotnet test tests/InvoiceHub.E2E
+```
+
 ## Run it with one command (Docker)
 
 Needs Docker only (no .NET SDK, no LocalDB, works on Windows, macOS with amd64 emulation, Linux).
@@ -62,8 +80,9 @@ cp .env.example .env        # then edit the secrets if you like
 docker compose up --build
 ```
 
-This starts SQL Server 2022 (`mcr.microsoft.com/mssql/server:2022-latest`), the API (migrations run on start), and a one-shot `seed` service that creates demo data through the public API: 4 customers (one in the seller's state, so CGST+SGST, three in other states, so IGST), 5 products and 60 invoices over about 11 months.
+This starts SQL Server 2022 (`mcr.microsoft.com/mssql/server:2022-latest`), the API (migrations run on start), and a one-shot `seed` service that creates demo data through the public API: 4 customers (one in the seller's state, so CGST+SGST, three in other states, so IGST), 5 products and 60 invoices over about 11 months. Most older invoices are paid through the signed webhook, some are part-paid, the rest are overdue, issued or still drafts, so the dashboard has something to show.
 
+- Web UI: http://localhost:8087 (change with `WEB_PORT`)
 - Swagger UI: http://localhost:8088/swagger (change the port with `API_PORT` in `.env`)
 - Health: http://localhost:8088/health/ready
 - Demo login (demo data only, set in `.env.example`): `demo@invoicehub.example` / `Demo#Pass2026`. Call `POST /api/auth/login`, paste the token into Swagger's Authorize button, then try `GET /api/reports/gst-summary?from=2025-01-01&to=2027-01-01`.
