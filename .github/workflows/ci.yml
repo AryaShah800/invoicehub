@@ -77,7 +77,7 @@ jobs:
       - name: Compose file fails fast without .env
         run: |
           if docker compose config >/dev/null 2>err.txt; then echo "expected failure"; exit 1; fi
-          grep -q "missing .env" err.txt
+          grep -qE "missing .env|set it in .env" err.txt
       - name: Compose file is valid with .env.example
         run: cp .env.example .env && docker compose config >/dev/null
       - name: Build image (no push)
