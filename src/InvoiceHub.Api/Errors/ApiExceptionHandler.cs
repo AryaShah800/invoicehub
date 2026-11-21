@@ -4,6 +4,7 @@ using InvoiceHub.Domain.Common;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace InvoiceHub.Api.Errors;
@@ -16,6 +17,7 @@ public sealed class ApiExceptionHandler(IProblemDetailsService problemDetails) :
 {
     private const int SqlUniqueIndexViolation = 2601;
     private const int SqlUniqueConstraintViolation = 2627;
+    private const int SqliteUniqueViolation = 19;
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
@@ -35,6 +37,9 @@ public sealed class ApiExceptionHandler(IProblemDetailsService problemDetails) :
             DbUpdateConcurrencyException =>
                 Problem(StatusCodes.Status409Conflict, "Conflict", "The record was changed by another request. Please retry."),
             DbUpdateException { InnerException: SqlException { Number: SqlUniqueIndexViolation or SqlUniqueConstraintViolation } } =>
+                Problem(StatusCodes.Status409Conflict, "Conflict", "The data conflicts with an existing record."),
+            // SQLite (the hosted demo): result code 19 is a constraint violation, here a unique index
+            DbUpdateException { InnerException: SqliteException { SqliteErrorCode: SqliteUniqueViolation } } =>
                 Problem(StatusCodes.Status409Conflict, "Conflict", "The data conflicts with an existing record."),
             _ => null,
         };

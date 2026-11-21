@@ -1,4 +1,5 @@
 using InvoiceHub.Api.Auth;
+using InvoiceHub.Api.Demo;
 using InvoiceHub.Api.Errors;
 using InvoiceHub.Api.Health;
 using InvoiceHub.Api.Hubs;
@@ -11,8 +12,10 @@ using InvoiceHub.Application.Abstractions;
 using InvoiceHub.Application.Auth;
 using InvoiceHub.Infrastructure;
 using InvoiceHub.Infrastructure.Identity;
+using InvoiceHub.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -48,6 +51,24 @@ builder.Services.AddScoped<InvoiceHub.Application.Maintenance.InvoiceMaintenance
 builder.Services.Configure<InvoiceHub.Api.Jobs.BackgroundJobOptions>(builder.Configuration.GetSection(InvoiceHub.Api.Jobs.BackgroundJobOptions.Section));
 builder.Services.AddSingleton<InvoiceHub.Api.Jobs.InvoiceMaintenanceWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<InvoiceHub.Api.Jobs.InvoiceMaintenanceWorker>());
+
+var demoOptions = builder.Configuration.GetSection(InvoiceHub.Infrastructure.Demo.DemoOptions.SectionName).Get<InvoiceHub.Infrastructure.Demo.DemoOptions>() ?? new();
+builder.Services.Configure<InvoiceHub.Infrastructure.Demo.DemoOptions>(builder.Configuration.GetSection(InvoiceHub.Infrastructure.Demo.DemoOptions.SectionName));
+if (demoOptions.Enabled)
+    builder.Services.AddHostedService<DemoResetService>();
+
+// Behind a reverse proxy (Render, Azure) the socket address is the proxy's. With this on, the rate limiter and
+// the logs see the client address from X-Forwarded-For instead. Off by default: only enable it behind a proxy
+// you trust, because the header can be forged by a client that reaches the app directly.
+if (builder.Configuration.GetValue<bool>("ForwardedHeaders:Enabled"))
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+    });
+}
 
 var jwt = JwtOptions.Load(builder.Configuration);
 builder.Services
@@ -111,11 +132,24 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
+if (DatabaseProviderConfiguration.Read(app.Configuration) == DatabaseProvider.Sqlite)
+{
+    // The migrations are SQL Server specific, so SQLite builds its schema straight from the model.
+    var connectionString = DatabaseProviderConfiguration.ReadConnectionString(app.Configuration, DatabaseProvider.Sqlite);
+    var directory = Path.GetDirectoryName(Path.GetFullPath(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource));
+    if (!string.IsNullOrEmpty(directory))
+        Directory.CreateDirectory(directory);
+
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<InvoiceHubDbContext>().Database.EnsureCreatedAsync();
+    if (demoOptions.Enabled)
+        await app.Services.GetRequiredService<InvoiceHub.Infrastructure.Demo.DemoDataSeeder>().SeedIfEmptyAsync(CancellationToken.None);
+}
+else if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
 {
     // Used by docker compose so a fresh database is created on first start.
     using var scope = app.Services.CreateScope();
-    await scope.ServiceProvider.GetRequiredService<InvoiceHub.Infrastructure.Persistence.InvoiceHubDbContext>().Database.MigrateAsync();
+    await scope.ServiceProvider.GetRequiredService<InvoiceHubDbContext>().Database.MigrateAsync();
 }
 
 if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled"))
@@ -124,6 +158,8 @@ if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger
     app.UseSwaggerUI();
 }
 
+if (app.Configuration.GetValue<bool>("ForwardedHeaders:Enabled"))
+    app.UseForwardedHeaders();
 app.UseSerilogRequestLogging(RequestLogging.Configure);
 app.UseExceptionHandler();
 if (!app.Environment.IsDevelopment())

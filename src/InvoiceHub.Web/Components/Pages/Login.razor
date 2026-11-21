@@ -3,6 +3,7 @@
 @inject IInvoiceApi Api
 @inject AuthSession Session
 @inject NavigationManager Nav
+@inject DemoLogin Demo
 @using System.ComponentModel.DataAnnotations
 
 <PageTitle>Sign in - InvoiceHub</PageTitle>
@@ -31,6 +32,18 @@
             }
             <button type="submit" class="btn btn-primary" disabled="@_busy">@(_busy ? "Signing in..." : "Sign in")</button>
         </EditForm>
+
+        @if (Demo.Enabled)
+        {
+            <div class="demo-box">
+                <p><strong>Public demo.</strong> Sample data that resets every few hours. Use this account:</p>
+                <dl>
+                    <dt>Email</dt><dd>@Demo.Email</dd>
+                    <dt>Password</dt><dd>@Demo.Password</dd>
+                </dl>
+                <button type="button" class="btn demo-login" disabled="@_busy" @onclick="UseDemoAccountAsync">Use demo account</button>
+            </div>
+        }
     </div>
     <aside class="login-side" aria-hidden="true">
         <div class="stamp">PAID</div>
@@ -47,6 +60,13 @@
     {
         if (firstRender && await Session.EnsureLoadedAsync())
             Nav.NavigateTo("/");
+    }
+
+    private async Task UseDemoAccountAsync()
+    {
+        _model.Email = Demo.Email;
+        _model.Password = Demo.Password;
+        await SubmitAsync();
     }
 
     private async Task SubmitAsync()

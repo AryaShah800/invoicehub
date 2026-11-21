@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+# Hosted-demo Blazor Server UI image (Render free tier). Listens on $PORT. Api__BaseUrl must be set by the host.
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY global.json Directory.Build.props ./
+COPY src/InvoiceHub.Domain/*.csproj src/InvoiceHub.Domain/
+COPY src/InvoiceHub.Application/*.csproj src/InvoiceHub.Application/
+COPY src/InvoiceHub.Web/*.csproj src/InvoiceHub.Web/
+RUN dotnet restore src/InvoiceHub.Web/InvoiceHub.Web.csproj
+COPY src/InvoiceHub.Domain/ src/InvoiceHub.Domain/
+COPY src/InvoiceHub.Application/ src/InvoiceHub.Application/
+COPY src/InvoiceHub.Web/ src/InvoiceHub.Web/
+RUN dotnet publish src/InvoiceHub.Web/InvoiceHub.Web.csproj -c Release -o /app --no-restore
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+WORKDIR /app
+COPY --from=build /app .
+ENV ASPNETCORE_ENVIRONMENT=Production \
+    Demo__Enabled=true \
+    DOTNET_gcServer=0 \
+    DOTNET_TieredPGO=0
+USER $APP_UID
+ENTRYPOINT ["sh", "-c", "ASPNETCORE_URLS=http://+:${PORT:-8080} exec dotnet InvoiceHub.Web.dll"]
