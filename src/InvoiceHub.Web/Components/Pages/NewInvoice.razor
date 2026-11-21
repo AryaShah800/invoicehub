@@ -1,0 +1,148 @@
+@page "/invoices/new"
+@inject IInvoiceApi Api
+@inject NavigationManager Nav
+@using InvoiceHub.Application.Customers
+@using InvoiceHub.Application.Products
+
+<PageTitle>New invoice - InvoiceHub</PageTitle>
+
+<section class="page">
+    <p class="crumb"><a href="/invoices">Invoices</a></p>
+    <header class="page-head"><h1>New invoice</h1></header>
+
+    @if (_loadError is not null)
+    {
+        <p class="form-error" role="alert">@_loadError</p>
+    }
+    else if (_customers is null)
+    {
+        <p class="muted" aria-busy="true">Loading...</p>
+    }
+    else
+    {
+        <EditForm Model="_form" OnValidSubmit="SubmitAsync" FormName="new-invoice" class="invoice-form">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="grid-2">
+                <div class="field">
+                    <label for="customer">Customer</label>
+                    <InputSelect id="customer" @bind-Value="_form.CustomerId">
+                        <option value="">Choose a customer</option>
+                        @foreach (var c in _customers)
+                        {
+                            <option value="@c.Id">@c.Name (state @c.StateCode)</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="() => _form.CustomerId" />
+                </div>
+                <div class="field">
+                    <label for="number">Invoice number</label>
+                    <InputText id="number" class="serial" @bind-Value="_form.InvoiceNumber" />
+                    <ValidationMessage For="() => _form.InvoiceNumber" />
+                </div>
+                <div class="field">
+                    <label for="issue">Issue date</label>
+                    <InputDate id="issue" @bind-Value="_form.IssueDate" />
+                </div>
+                <div class="field">
+                    <label for="due">Due date</label>
+                    <InputDate id="due" @bind-Value="_form.DueDate" />
+                    <ValidationMessage For="() => _form.DueDate" />
+                </div>
+            </div>
+
+            <fieldset class="lines">
+                <legend>Lines</legend>
+                @for (var i = 0; i < _form.Lines.Count; i++)
+                {
+                    var line = _form.Lines[i];
+                    var index = i;
+                    <div class="line-row" @key="line">
+                        <div class="field">
+                            <label for="product-@index">Product</label>
+                            <InputSelect id="@($"product-{index}")" @bind-Value="line.ProductId">
+                                <option value="">Choose a product</option>
+                                @foreach (var p in _products)
+                                {
+                                    <option value="@p.Id">@p.Name - @Money.Format(p.UnitPrice) + @p.GstRate.ToString("0.##")% GST</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="field field-qty">
+                            <label for="qty-@index">Quantity</label>
+                            <InputNumber id="@($"qty-{index}")" @bind-Value="line.Quantity" />
+                        </div>
+                        <div class="line-total">@LineTotal(line)</div>
+                        <button type="button" class="link" aria-label="Remove line @(index + 1)" disabled="@(_form.Lines.Count == 1)" @onclick="() => _form.Lines.RemoveAt(index)">Remove</button>
+                    </div>
+                }
+                <button type="button" class="btn" id="add-line" @onclick="() => _form.Lines.Add(new LineForm())">Add line</button>
+            </fieldset>
+
+            <div class="field">
+                <label for="notes">Notes (optional)</label>
+                <InputTextArea id="notes" rows="2" @bind-Value="_form.Notes" />
+            </div>
+
+            <div class="form-foot">
+                <p class="muted" id="estimate">Estimate before rounding: @Money.Format(Estimate) including GST. The server works out the exact CGST, SGST or IGST from the customer's state.</p>
+                @if (_serverErrors.Count > 0)
+                {
+                    <ul class="form-error" role="alert">
+                        @foreach (var message in _serverErrors) { <li>@message</li> }
+                    </ul>
+                }
+                <button type="submit" class="btn btn-primary" id="save-draft" disabled="@_busy">@(_busy ? "Saving..." : "Save draft")</button>
+            </div>
+        </EditForm>
+    }
+</section>
+
+@code {
+    private readonly InvoiceForm _form = new();
+    private IReadOnlyList<CustomerDto>? _customers;
+    private IReadOnlyList<ProductDto> _products = [];
+    private string? _loadError;
+    private List<string> _serverErrors = [];
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        _form.IssueDate = today;
+        _form.DueDate = today.AddDays(15);
+        _form.InvoiceNumber = $"INV-{today:yyMMdd}-{Random.Shared.Next(100, 999)}";
+        try
+        {
+            _customers = await Api.ListCustomersAsync();
+            _products = await Api.ListActiveProductsAsync();
+        }
+        catch (ApiException ex) { _loadError = ex.Message; }
+        catch (HttpRequestException) { _loadError = "The InvoiceHub API is not reachable."; }
+    }
+
+    private decimal Price(LineForm line)
+    {
+        var p = _products.FirstOrDefault(x => x.Id == line.ProductId);
+        return p is null ? 0m : p.UnitPrice * line.Quantity * (1 + p.GstRate / 100m);
+    }
+
+    private string LineTotal(LineForm line) => line.ProductId is null ? "" : Money.Format(Price(line));
+
+    private decimal Estimate => _form.Lines.Sum(Price);
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        _serverErrors = [];
+        try
+        {
+            var created = await Api.CreateInvoiceAsync(_form.ToCommand());
+            Nav.NavigateTo($"/invoices/{created.Id}");
+        }
+        catch (ApiException ex) { _serverErrors = ex.AllMessages.ToList(); }
+        catch (HttpRequestException) { _serverErrors = ["The InvoiceHub API is not reachable."]; }
+        finally { _busy = false; }
+    }
+}

@@ -1,0 +1,168 @@
+@page "/invoices"
+@implements IDisposable
+@inject IInvoiceApi Api
+@inject InvoiceEvents Events
+@inject NavigationManager Nav
+@using InvoiceHub.Application.Customers
+@using InvoiceHub.Application.Invoices.Queries.ListInvoices
+
+<PageTitle>Invoices - InvoiceHub</PageTitle>
+
+<section class="page">
+    <header class="page-head">
+        <h1>Invoices</h1>
+        <a class="btn btn-primary" href="/invoices/new">New invoice</a>
+    </header>
+
+    <form class="filters" @onsubmit="ApplyAsync" @onsubmit:preventDefault aria-label="Filter invoices">
+        <div class="field">
+            <label for="f-status">Status</label>
+            <select id="f-status" @bind="_status">
+                <option value="">All</option>
+                <option value="Draft">Draft</option>
+                <option value="Issued">Issued</option>
+                <option value="PartiallyPaid">Part paid</option>
+                <option value="Paid">Paid</option>
+                <option value="Cancelled">Cancelled</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="f-customer">Customer</label>
+            <select id="f-customer" @bind="_customerId">
+                <option value="">All customers</option>
+                @foreach (var c in _customers)
+                {
+                    <option value="@c.Id">@c.Name</option>
+                }
+            </select>
+        </div>
+        <div class="field">
+            <label for="f-from">Issued from</label>
+            <input id="f-from" type="date" @bind="_from" />
+        </div>
+        <div class="field">
+            <label for="f-to">to</label>
+            <input id="f-to" type="date" @bind="_to" />
+        </div>
+        <label class="check"><input id="f-overdue" type="checkbox" @bind="_overdueOnly" /> Overdue only</label>
+        <div class="filter-actions">
+            <button type="submit" class="btn">Apply</button>
+            <button type="button" class="link" @onclick="ResetAsync">Clear</button>
+        </div>
+    </form>
+
+    @if (_error is not null)
+    {
+        <p class="form-error" role="alert">@_error</p>
+    }
+    else if (_page is null)
+    {
+        <p class="muted" aria-busy="true">Loading...</p>
+    }
+    else if (_page.Items.Count == 0)
+    {
+        <div class="empty">
+            <p><strong>No invoices match.</strong></p>
+            <p class="muted">Try a wider date range or clear the filters.</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table" id="invoice-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Number</th>
+                        <th scope="col">Customer</th>
+                        <th scope="col">Issued</th>
+                        <th scope="col">Due</th>
+                        <th scope="col">Status</th>
+                        <th scope="col" class="num">Total</th>
+                        <th scope="col" class="num">Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var i in _page.Items)
+                    {
+                        <tr @key="i.Id">
+                            <td><a class="serial" href="/invoices/@i.Id">@i.InvoiceNumber</a></td>
+                            <td>@i.CustomerName</td>
+                            <td>@Money.Date(i.IssueDate)</td>
+                            <td>@Money.Date(i.DueDate)</td>
+                            <td><StatusBadge Status="@i.Status" IsOverdue="@i.IsOverdue" /></td>
+                            <td class="num">@Money.Format(i.GrandTotal)</td>
+                            <td class="num">@(i.BalanceDue == 0 ? "-" : Money.Format(i.BalanceDue))</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <nav class="pager" aria-label="Pages">
+            <span class="muted small">@_page.TotalCount invoices, page @_page.Page of @Math.Max(_page.TotalPages, 1)</span>
+            <span>
+                <button type="button" class="btn" disabled="@(_page.Page <= 1)" @onclick="() => GoToAsync(_page.Page - 1)">Previous</button>
+                <button type="button" class="btn" disabled="@(_page.Page >= _page.TotalPages)" @onclick="() => GoToAsync(_page.Page + 1)">Next</button>
+            </span>
+        </nav>
+    }
+</section>
+
+@code {
+    private PagedResult<InvoiceSummaryDto>? _page;
+    private IReadOnlyList<CustomerDto> _customers = [];
+    private string? _error;
+
+    private string _status = "";
+    private string _customerId = "";
+    private DateTime? _from;
+    private DateTime? _to;
+    private bool _overdueOnly;
+    private int _pageNo = 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Events.PaymentReceived += OnPayment;
+
+        // The dashboard links here with ?status=Draft.
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        if (query.TryGetValue("status", out var status)) _status = status.ToString();
+        if (query.TryGetValue("overdue", out var overdue)) _overdueOnly = overdue == "true";
+
+        try { _customers = await Api.ListCustomersAsync(); }
+        catch (ApiException) { /* the filter just has no customers; the list below reports the real error */ }
+        catch (HttpRequestException) { }
+        await LoadAsync();
+    }
+
+    private InvoiceFilter Filter => new(
+        string.IsNullOrEmpty(_status) ? null : _status,
+        Guid.TryParse(_customerId, out var c) ? c : null,
+        _from is { } f ? DateOnly.FromDateTime(f) : null,
+        _to is { } t ? DateOnly.FromDateTime(t) : null,
+        _overdueOnly,
+        _pageNo);
+
+    private async Task LoadAsync()
+    {
+        try { _page = await Api.ListInvoicesAsync(Filter); _error = null; }
+        catch (ApiException ex) { _error = string.Join(" ", ex.AllMessages); }
+        catch (HttpRequestException) { _error = "The InvoiceHub API is not reachable."; }
+    }
+
+    private Task ApplyAsync() { _pageNo = 1; return LoadAsync(); }
+
+    private Task GoToAsync(int page) { _pageNo = page; return LoadAsync(); }
+
+    private Task ResetAsync()
+    {
+        _status = _customerId = "";
+        _from = _to = null;
+        _overdueOnly = false;
+        return ApplyAsync();
+    }
+
+    private void OnPayment(InvoiceHub.Application.Payments.PaymentReceivedMessage _) =>
+        InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+
+    public void Dispose() => Events.PaymentReceived -= OnPayment;
+}

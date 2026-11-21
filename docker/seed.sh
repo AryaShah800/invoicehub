@@ -13,6 +13,13 @@ if [ "$code" != "200" ] && [ "$code" != "201" ]; then
 fi
 TOKEN=$(curl -s -X POST "$API/api/auth/login" -H "$json" -d "$(jq -n --arg e "$EMAIL" --arg p "$PASS" '{email:$e,password:$p}')" | jq -r .accessToken)
 auth="Authorization: Bearer $TOKEN"
+# Records a payment the way the payment provider does: HMAC-SHA256 over "timestamp.body" with the shared secret.
+pay() {
+  body=$(jq -nc --arg e "seed-$1-$RANDOM" --arg i "$1" --argjson a "$2" '{eventId:$e,invoiceId:$i,amount:$a,currency:"INR",reference:"demo"}')
+  ts=$(date +%s)
+  sig=$(printf '%s.%s' "$ts" "$body" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | sed 's/^.* //')
+  curl -sf -o /dev/null -X POST "$API/api/webhooks/payments" -H "$json" -H "X-Payment-Timestamp: $ts" -H "X-Payment-Signature: sha256=$sig" -d "$body"
+}
 post() { curl -sf -X POST "$API$1" -H "$json" -H "$auth" -d "$2"; }
 
 # state 27 = same state as the seller (CGST+SGST); 29, 07, 24 = other states (IGST)
@@ -36,7 +43,13 @@ for back in 330 300 270 240 210 180 150 120 90 60 45 30 20 10 5; do
       '{customerId:$c,invoiceNumber:$no,issueDate:$i,dueDate:$d,notes:"Demo invoice",lines:[{productId:$pa,quantity:$q},{productId:$pb,quantity:2},{productId:$pc,quantity:10}]}')
     id=$(post /api/invoices "$body" | jq -r .id)
     # leave the newest few as drafts, issue the rest
-    [ $back -gt 20 ] && post "/api/invoices/$id/issue" '{}' >/dev/null || true
+    if [ $back -gt 20 ]; then
+      total=$(post "/api/invoices/$id/issue" '{}' | jq -r .grandTotal)
+      # older invoices are mostly paid (through the signed webhook, like a real provider), some part-paid, the rest stay open
+      if [ $back -ge 60 ] && [ $((n % 4)) -ne 0 ]; then pay "$id" "$total"
+      elif [ $back -ge 30 ] && [ $((n % 4)) -eq 0 ]; then pay "$id" "$(echo "$total" | awk '{printf "%.2f", $1 / 2}')"
+      fi
+    fi
   done
 done
 echo "Seeded 4 customers, 5 products and $n invoices. Login: $EMAIL"
