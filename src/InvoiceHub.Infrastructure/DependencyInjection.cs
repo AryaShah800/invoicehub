@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<InvoiceHubDbContext>());
 
         services.AddScoped<IGstReportReader, DapperGstReportReader>();
+        services.AddSingleton<InvoiceHub.Application.Invoices.Pdf.IInvoicePdfRenderer, QuestPdfInvoiceRenderer>();
         services.AddScoped<EfGstReportReader>();
 
         services.AddSingleton(JwtOptions.Load(configuration));
