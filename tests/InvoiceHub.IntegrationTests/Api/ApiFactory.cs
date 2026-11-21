@@ -17,7 +17,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public const string SigningKey = "integration-test-signing-key-0123456789-abcdef";
     public const string WebhookSecret = "integration-test-webhook-secret-0123456789";
 
-    private static readonly string[] EnvironmentKeys = ["ConnectionStrings__InvoiceHub", "Jwt__SigningKey", "PaymentWebhook__Secret"];
+    private static readonly string[] EnvironmentKeys = ["ConnectionStrings__InvoiceHub", "Jwt__SigningKey", "PaymentWebhook__Secret", "BackgroundJobs__Enabled"];
 
     private readonly string _connectionString;
 
@@ -29,6 +29,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Environment.SetEnvironmentVariable("ConnectionStrings__InvoiceHub", _connectionString);
         Environment.SetEnvironmentVariable("Jwt__SigningKey", SigningKey);
         Environment.SetEnvironmentVariable("PaymentWebhook__Secret", WebhookSecret);
+        // Tests run the job explicitly for a chosen date; the timer-driven loop must not interfere.
+        Environment.SetEnvironmentVariable("BackgroundJobs__Enabled", "false");
     }
 
     /// <summary>

@@ -14,7 +14,7 @@ Multi-tenant GST invoicing REST API built with ASP.NET Core (.NET 8). Businesses
 | Azure resources ([infra/provision.ps1](infra/provision.ps1)) | Written and syntax-checked. **Not yet run against Azure** |
 | Live deployment | **Not deployed yet.** There is no public URL |
 | Web UI (Blazor Server, `src/InvoiceHub.Web`) | Built: login, dashboard, invoice list and detail, create invoice, live payment toast |
-| Tests | `dotnet test` on this branch: 331 passed, 1 skipped (122 unit, 154 API integration, 55 UI component tests, 1 browser smoke test that runs only when `E2E_WEB_URL` is set). Unit tests use Moq and FluentAssertions, UI tests use bUnit |
+| Tests | `dotnet test` on this branch (Release, run just before this README edit): 360 passed, 1 skipped (138 unit, 167 API integration, 55 UI component tests; the 1 skipped is the browser smoke test, which runs only when `E2E_WEB_URL` is set). Unit tests use Moq and FluentAssertions, UI tests use bUnit |
 
 ## Tech stack
 
@@ -39,12 +39,38 @@ infra/provision.ps1             creates the Azure resources
 azure-pipelines.yml             build, test, package, deploy
 ```
 
+```mermaid
+flowchart LR
+    User["Browser"] --> Web["InvoiceHub.Web: Blazor Server"]
+    Web -->|"HTTP + JWT"| Api["InvoiceHub.Api: controllers, auth, rate limiting"]
+    Web <-->|"SignalR events"| Hub["SignalR hub, one group per tenant"]
+    Provider["Payment provider"] -->|"HMAC-signed webhook"| Api
+    Api --> App["Application: MediatR, validators, GST rules"]
+    App --> Domain["Domain: invoices, payments, recurring templates"]
+    App --> Infra["Infrastructure: EF Core with tenant filters, Dapper"]
+    Infra --> DB[("SQL Server")]
+    Infra --> SP["Stored proc: GST summary"]
+    SP --- DB
+    Worker["Background worker: overdue flags, recurring invoices"] --> App
+    Worker --> Hub
+    Api --> Hub
+```
+
 Choices worth knowing about:
 
 - **Multi-tenancy:** every tenant-owned entity has an EF Core global query filter on the tenant id taken from the signed-in user's token, and a save-time guard that rejects writes for another tenant. With no tenant, queries return nothing (fail closed). Another tenant's record is a 404, not a 403.
 - **CQRS with MediatR:** a pipeline behavior runs the FluentValidation validators before every handler. MediatR is pinned to 12.5.0, the last release under the Apache licence (13 and later need a licence key in production).
 - **`IApplicationDbContext` exposes EF `DbSet`s,** so the Application project references EF Core (without a database provider). This is a pragmatic choice over wrapping everything in repositories.
 - **Money rules live in the domain,** not in controllers: GST split, rounding, payment application and invoice status changes.
+
+## Design decisions
+
+- **Dapper only where it was measured to help.** The GST report runs as a stored procedure through Dapper; everything else is EF Core. The benchmark (100,000 invoices) showed Dapper beating the first EF query by 29% to 45%, but an EF query rewritten to the same shape came within 3% to 5%, so the gain was mostly the query, not the library. The EF version is kept and tested to return identical rows.
+- **`OverdueMarkedOn` instead of an `Overdue` status.** Whether an invoice is overdue changes with the calendar, while its status changes only through events (issue, payment, cancel). A stored `Overdue` status would be wrong at midnight until a job ran. Instead the status stays `Issued` or `PartiallyPaid`, and the worker stamps the date it first saw the invoice overdue so the SignalR event is sent once.
+- **Tenant filter at the EF level, failing closed.** A global query filter plus a save-time guard means a forgotten `Where` cannot leak another tenant's data. Dapper bypasses filters, so the stored procedure takes the tenant id as a required parameter and tests check isolation.
+- **Webhook auth by HMAC, not JWT,** because the caller is a payment provider with no user. Signature over the raw bytes, a timestamp window against replay, and a unique event id per tenant for idempotency.
+- **Idempotent background jobs.** Recurring invoices get a deterministic number, unique per tenant, so a re-run or a second instance cannot double-bill. Job logic takes the date as an argument and is tested without the wall clock.
+- **Domain owns the money rules** (GST split, rounding, payment application), so controllers and handlers cannot get them wrong.
 
 ## PDF invoices
 
@@ -121,6 +147,7 @@ The default connection string in `src/InvoiceHub.Api/appsettings.json` points at
 | `PaymentWebhook:ToleranceSeconds` | How far a webhook timestamp may be from the server clock | 300 |
 | `RateLimiting:AuthPermitsPerMinute` | Register and login requests per client address per minute | 10 |
 | `RateLimiting:WebhookPermitsPerMinute` | Webhook requests per client address per minute | 300 |
+| `BackgroundJobs:Enabled`, `IntervalMinutes`, `UtcOffsetMinutes` | The overdue and recurring-invoice job: on or off, how often it wakes, and the business time zone that decides what "today" is | `true`, 60, 330 (India) |
 | `Serilog:*` | Log levels and sinks | console plus rolling JSON file in `logs/` |
 | `AllowedHosts` | Host names the app answers to | `*` (set it in production) |
 
@@ -224,6 +251,20 @@ await connection.start();
 ```
 
 The message carries `invoiceId`, `invoiceNumber`, `eventId`, `amount`, `amountPaid`, `balanceDue`, `invoiceStatus` and `receivedAtUtc`. Each connection joins the group `tenant:{tenantId}` from its token's `tenant_id` claim. A failed push is logged but does not fail the webhook, because the payment is already saved.
+
+## Background jobs
+
+A hosted service (`InvoiceMaintenanceWorker`) wakes every `BackgroundJobs:IntervalMinutes` and, for each active tenant:
+
+1. **Flags overdue invoices.** An issued or part-paid invoice past its due date gets `OverdueMarkedOn` set the first time the job sees it, and a SignalR `InvoiceOverdue` event goes to that tenant's connected clients. It is set once, so the same invoice is never announced twice.
+2. **Raises recurring invoices.** `POST /api/recurring-invoices` stores a template (customer, products and quantities, every 1 to 12 months, first run date, optional end date, days until due). When a template's next run date has arrived, the job creates and issues one invoice per due occurrence (a template that was paused for months catches up at most 12 per run), moves the template to its next date, and sends `RecurringInvoiceGenerated`. `POST /api/recurring-invoices/{id}/pause` stops a template.
+
+Design notes:
+
+- **Idempotent.** Each occurrence has a deterministic invoice number (`R` + 6 hex characters of the template id + `-yyMMdd`), unique per tenant. Running the job twice, or two instances at once, cannot create the same invoice twice, and a crash between saving the invoice and moving the template forward is repaired on the next run. Templates carry a row version for the same reason.
+- **Testable time.** The logic lives in `InvoiceMaintenanceService` (Application project) and takes the date as an argument; the worker only decides what "today" is from an injected `TimeProvider` and `BackgroundJobs:UtcOffsetMinutes`. Tests run it for chosen dates and never depend on the wall clock.
+- **Tenant scope without a user.** There is no signed-in user in a background service, so each unit of work gets its own DI scope with the tenant assigned first. The tenant query filters and the write guard stay in force, and a failing tenant or template is logged and skipped without stopping the rest.
+- **Pluggable notifier.** `IInvoiceEventNotifier` is implemented with SignalR today. An email or SMS implementation can be added without touching the job.
 
 ## GST report
 

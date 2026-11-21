@@ -90,6 +90,9 @@ namespace InvoiceHub.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<DateOnly?>("OverdueMarkedOn")
+                        .HasColumnType("date");
+
                     b.Property<string>("PlaceOfSupplyStateCode")
                         .IsRequired()
                         .HasColumnType("char(2)");
@@ -237,6 +240,85 @@ namespace InvoiceHub.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "InvoiceId");
 
                     b.ToTable("Payments", (string)null);
+                });
+
+            modelBuilder.Entity("InvoiceHub.Domain.Invoices.RecurringInvoice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("DueInDays")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("FirstRunDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("IntervalMonths")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateOnly>("NextRunDate")
+                        .HasColumnType("date");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("TenantId", "IsActive", "NextRunDate");
+
+                    b.ToTable("RecurringInvoices", (string)null);
+                });
+
+            modelBuilder.Entity("InvoiceHub.Domain.Invoices.RecurringInvoiceLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<Guid>("RecurringInvoiceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("RecurringInvoiceId");
+
+                    b.ToTable("RecurringInvoiceLines", (string)null);
                 });
 
             modelBuilder.Entity("InvoiceHub.Domain.Products.Product", b =>
@@ -631,6 +713,36 @@ namespace InvoiceHub.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("InvoiceHub.Domain.Invoices.RecurringInvoice", b =>
+                {
+                    b.HasOne("InvoiceHub.Domain.Customers.Customer", null)
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("InvoiceHub.Domain.Tenants.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("InvoiceHub.Domain.Invoices.RecurringInvoiceLine", b =>
+                {
+                    b.HasOne("InvoiceHub.Domain.Products.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("InvoiceHub.Domain.Invoices.RecurringInvoice", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("RecurringInvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("InvoiceHub.Domain.Products.Product", b =>
                 {
                     b.HasOne("InvoiceHub.Domain.Tenants.Tenant", null)
@@ -701,6 +813,11 @@ namespace InvoiceHub.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("InvoiceHub.Domain.Invoices.Invoice", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("InvoiceHub.Domain.Invoices.RecurringInvoice", b =>
                 {
                     b.Navigation("Lines");
                 });
