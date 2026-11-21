@@ -3,6 +3,9 @@ using InvoiceHub.Application.Invoices;
 using InvoiceHub.Application.Invoices.Commands.CreateInvoice;
 using InvoiceHub.Application.Invoices.Commands.IssueInvoice;
 using InvoiceHub.Application.Invoices.Queries.GetInvoiceById;
+using InvoiceHub.Application.Common;
+using InvoiceHub.Application.Invoices.Queries.ListInvoices;
+using InvoiceHub.Domain.Invoices;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -28,6 +31,15 @@ public sealed class InvoicesController(ISender sender) : ControllerBase
     [ProducesResponseType(typeof(InvoiceDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Issue(Guid id, CancellationToken ct) =>
         Ok(await sender.Send(new IssueInvoiceCommand(id), ct));
+
+    /// <summary>Lists the caller's invoices, newest first, filtered by status, customer, issue date range or overdue.</summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(PagedResult<InvoiceSummaryDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> List(
+        [FromQuery] InvoiceStatus? status, [FromQuery] Guid? customerId, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
+        [FromQuery] bool? overdue, [FromQuery] int page = 1, [FromQuery] int pageSize = PagedResult<InvoiceSummaryDto>.DefaultPageSize,
+        CancellationToken ct = default) =>
+        Ok(await sender.Send(new ListInvoicesQuery(status, customerId, from, to, overdue, page, pageSize), ct));
 
     /// <summary>Gets one of the caller's invoices. Another tenant's invoice is a 404.</summary>
     [HttpGet("{id:guid}")]
