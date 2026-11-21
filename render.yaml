@@ -27,7 +27,7 @@ services:
     envVars:
       # https://<service-name>.onrender.com. If Render adds a suffix because the name was taken, change this.
       - key: Api__BaseUrl
-        value: https://invoicehub-api.onrender.com
+        value: https://invoicehub-api-3zwv.onrender.com
       # Public demo account shown on the login page. Must match the API's Demo__Email / Demo__Password (defaults are the same).
       - key: Demo__Enabled
         value: "true"

@@ -4,6 +4,8 @@
 
 Multi-tenant GST invoicing REST API built with ASP.NET Core (.NET 8). Businesses register, add customers and products, raise GST-correct invoices (CGST + SGST within a state, IGST across states), receive payments through an HMAC-signed webhook, and get live updates over SignalR.
 
+**Live demo: https://invoicehub-q7z9.onrender.com** (SQLite demo build on Render's free tier, see [Hosted demo](#hosted-demo)).
+
 ## Status
 
 | Area | State |
@@ -99,7 +101,7 @@ E2E_WEB_URL=http://localhost:8087 E2E_PASSWORD='<DEMO_PASSWORD from .env>' dotne
 
 ## Hosted demo
 
-**Live demo:** _(link added after deploy)_
+**Live demo:** https://invoicehub-q7z9.onrender.com (Blazor UI, press **Use demo account**) · API with Swagger: https://invoicehub-api-3zwv.onrender.com/swagger. Free tier: both services sleep when idle, so the first visit can take a minute or two.
 
 A free public demo is described by [render.yaml](render.yaml): two Render free-tier web services built from [Dockerfile.demo](Dockerfile.demo) (API, `invoicehub-api`) and [Dockerfile.web.demo](Dockerfile.web.demo) (Blazor UI, `invoicehub`). What it runs, and how it differs from the normal setup:
 
