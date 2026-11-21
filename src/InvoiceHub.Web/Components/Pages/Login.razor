@@ -1,0 +1,83 @@
+@page "/login"
+@layout LoginLayout
+@inject IInvoiceApi Api
+@inject AuthSession Session
+@inject NavigationManager Nav
+@using System.ComponentModel.DataAnnotations
+
+<PageTitle>Sign in - InvoiceHub</PageTitle>
+
+<section class="login">
+    <div class="login-card">
+        <p class="brand login-brand"><span class="brand-mark" aria-hidden="true">IH</span><span>InvoiceHub</span></p>
+        <h1>Sign in</h1>
+        <p class="muted">GST invoices for your business.</p>
+
+        <EditForm Model="_model" OnValidSubmit="SubmitAsync" FormName="login">
+            <DataAnnotationsValidator />
+            <div class="field">
+                <label for="email">Email</label>
+                <InputText id="email" type="email" autocomplete="username" @bind-Value="_model.Email" />
+                <ValidationMessage For="() => _model.Email" />
+            </div>
+            <div class="field">
+                <label for="password">Password</label>
+                <InputText id="password" type="password" autocomplete="current-password" @bind-Value="_model.Password" />
+                <ValidationMessage For="() => _model.Password" />
+            </div>
+            @if (_error is not null)
+            {
+                <p class="form-error" role="alert">@_error</p>
+            }
+            <button type="submit" class="btn btn-primary" disabled="@_busy">@(_busy ? "Signing in..." : "Sign in")</button>
+        </EditForm>
+    </div>
+    <aside class="login-side" aria-hidden="true">
+        <div class="stamp">PAID</div>
+        <p class="serial">INV-2026-0042</p>
+    </aside>
+</section>
+
+@code {
+    private readonly LoginModel _model = new();
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && await Session.EnsureLoadedAsync())
+            Nav.NavigateTo("/");
+    }
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Session.SignInAsync(await Api.LoginAsync(_model.Email, _model.Password));
+            Nav.NavigateTo("/");
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        catch (HttpRequestException)
+        {
+            _error = "The InvoiceHub API is not reachable. Check that it is running.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class LoginModel
+    {
+        [Required(ErrorMessage = "Enter your email."), EmailAddress(ErrorMessage = "That does not look like an email address.")]
+        public string Email { get; set; } = "";
+
+        [Required(ErrorMessage = "Enter your password.")]
+        public string Password { get; set; } = "";
+    }
+}

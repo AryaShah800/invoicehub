@@ -1,0 +1,83 @@
+@page "/"
+@implements IDisposable
+@inject IInvoiceApi Api
+@inject InvoiceEvents Events
+
+<PageTitle>Dashboard - InvoiceHub</PageTitle>
+
+<section class="page">
+    <header class="page-head">
+        <h1>Dashboard</h1>
+        <a class="btn btn-primary" href="/invoices/new">New invoice</a>
+    </header>
+
+    @if (_error is not null)
+    {
+        <p class="form-error" role="alert">@_error</p>
+    }
+    else if (_data is null)
+    {
+        <p class="muted" aria-busy="true">Loading...</p>
+    }
+    else
+    {
+        <div class="kpis">
+            <div class="kpi @(_data.OverdueCount > 0 ? "kpi-overdue" : "")">
+                <span class="kpi-label">Overdue</span>
+                <span class="kpi-value" id="kpi-overdue-count">@_data.OverdueCount <small>@(_data.OverdueCount == 1 ? "invoice" : "invoices")</small></span>
+                <span class="kpi-note">@Money.Format(_data.OverdueAmount) past due</span>
+            </div>
+            <div class="kpi">
+                <span class="kpi-label">Outstanding</span>
+                <span class="kpi-value">@Money.Format(_data.OutstandingAmount)</span>
+                <span class="kpi-note">Issued and part-paid invoices</span>
+            </div>
+            <div class="kpi">
+                <span class="kpi-label">Billed, last 12 months</span>
+                <span class="kpi-value">@Money.Format(_data.Months.Sum(m => m.Total))</span>
+                <span class="kpi-note">@_data.Months.Sum(m => m.InvoiceCount) invoices issued</span>
+            </div>
+            <div class="kpi">
+                <span class="kpi-label">Drafts</span>
+                <span class="kpi-value">@_data.DraftCount</span>
+                <span class="kpi-note"><a href="/invoices?status=Draft">Waiting to be issued</a></span>
+            </div>
+        </div>
+
+        <div class="panels">
+            <section class="panel panel-wide" aria-labelledby="rev-h">
+                <h2 id="rev-h">Billed per month</h2>
+                <p class="muted small">Total including GST, by issue date.</p>
+                <RevenueChart Months="_data.Months" />
+            </section>
+            <section class="panel" aria-labelledby="gst-h">
+                <h2 id="gst-h">GST collected</h2>
+                <p class="muted small">Last 12 months. @Money.Format(_data.Cgst + _data.Sgst + _data.Igst) in total.</p>
+                <GstSplit Cgst="_data.Cgst" Sgst="_data.Sgst" Igst="_data.Igst" />
+            </section>
+        </div>
+    }
+</section>
+
+@code {
+    private DashboardSummary? _data;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Events.PaymentReceived += OnPayment;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try { _data = await Api.GetDashboardAsync(); _error = null; }
+        catch (ApiException ex) { _error = ex.Message; }
+        catch (HttpRequestException) { _error = "The InvoiceHub API is not reachable."; }
+    }
+
+    private void OnPayment(InvoiceHub.Application.Payments.PaymentReceivedMessage _) =>
+        InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+
+    public void Dispose() => Events.PaymentReceived -= OnPayment;
+}

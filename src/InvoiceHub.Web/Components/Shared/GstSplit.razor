@@ -1,0 +1,39 @@
+@using System.Globalization
+@if (Total == 0)
+{
+    <p class="muted">No GST billed in this period yet.</p>
+}
+else
+{
+    <div class="split" role="img" aria-label="@Label">
+        @foreach (var part in Parts.Where(p => p.Amount > 0))
+        {
+            <span class="split-seg @part.Css" style="width:@Width(part.Amount)%" title="@part.Name @Money.Format(part.Amount)"></span>
+        }
+    </div>
+    <dl class="split-legend">
+        @foreach (var part in Parts)
+        {
+            <div>
+                <dt><span class="dot @part.Css" aria-hidden="true"></span>@part.Name</dt>
+                <dd>@Money.Format(part.Amount)<span class="muted"> @((part.Amount / Total * 100m).ToString("0", CultureInfo.InvariantCulture))%</span></dd>
+            </div>
+        }
+    </dl>
+}
+
+@code {
+    [Parameter] public decimal Cgst { get; set; }
+    [Parameter] public decimal Sgst { get; set; }
+    [Parameter] public decimal Igst { get; set; }
+
+    private decimal Total => Cgst + Sgst + Igst;
+    private string Label => $"GST split: CGST {Money.Format(Cgst)}, SGST {Money.Format(Sgst)}, IGST {Money.Format(Igst)}";
+
+    private string Width(decimal amount) => ((double)(amount / Total * 100m)).ToString("0.##", CultureInfo.InvariantCulture);
+
+    private IEnumerable<(string Name, decimal Amount, string Css)> Parts =>
+    [
+        ("CGST", Cgst, "s-cgst"), ("SGST", Sgst, "s-sgst"), ("IGST", Igst, "s-igst"),
+    ];
+}

@@ -1,0 +1,54 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject AuthSession Session
+@inject InvoiceEvents Events
+@inject NavigationManager Nav
+
+@if (_ready)
+{
+    <div class="shell">
+        <aside class="rail">
+            <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">IH</span><span>InvoiceHub</span></a>
+            <nav aria-label="Main">
+                <NavLink href="/" Match="NavLinkMatch.All">Dashboard</NavLink>
+                <NavLink href="/invoices" Match="NavLinkMatch.All">Invoices</NavLink>
+                <NavLink href="/invoices/new">New invoice</NavLink>
+            </nav>
+            <div class="rail-foot">
+                <span class="muted small" title="@Session.User?.Email">@Session.User?.Email</span>
+                <button type="button" class="link" @onclick="SignOut">Sign out</button>
+            </div>
+        </aside>
+        <main class="main" id="main">@Body</main>
+    </div>
+    <Toasts />
+}
+
+@code {
+    private bool _ready;
+
+    protected override void OnInitialized() => Session.Changed += OnSessionChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        if (!await Session.EnsureLoadedAsync())
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+        _ready = true;
+        StateHasChanged();
+        await Events.StartAsync();
+    }
+
+    private void OnSessionChanged()
+    {
+        if (!Session.IsSignedIn)
+            InvokeAsync(() => Nav.NavigateTo("/login"));
+    }
+
+    private Task SignOut() => Session.SignOutAsync();
+
+    public void Dispose() => Session.Changed -= OnSessionChanged;
+}

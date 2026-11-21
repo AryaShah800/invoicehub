@@ -1,0 +1,16 @@
+<span class="badge @Css">@Label</span>
+
+@code {
+    [Parameter, EditorRequired] public string Status { get; set; } = "";
+    [Parameter] public bool IsOverdue { get; set; }
+
+    private string Label => IsOverdue ? "Overdue" : Status switch { "PartiallyPaid" => "Part paid", _ => Status };
+    private string Css => IsOverdue ? "badge-overdue" : Status switch
+    {
+        "Paid" => "badge-paid",
+        "PartiallyPaid" => "badge-part",
+        "Issued" => "badge-issued",
+        "Cancelled" => "badge-cancelled",
+        _ => "badge-draft",
+    };
+}
