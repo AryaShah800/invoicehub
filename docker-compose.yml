@@ -1,0 +1,55 @@
+# One command: docker compose up --build
+# Needs a .env file (copy .env.example). Swagger: http://localhost:8088/swagger
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?copy .env.example to .env}
+    volumes:
+      - sqldata:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8088}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Swagger__Enabled: "true"
+      Https__RedirectDisabled: "true"
+      Database__MigrateOnStartup: "true"
+      ConnectionStrings__InvoiceHub: Server=db;Database=InvoiceHub;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=true
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?copy .env.example to .env}
+      PaymentWebhook__Secret: ${PAYMENT_WEBHOOK_SECRET:?copy .env.example to .env}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080 && printf \"GET /health/ready HTTP/1.0\r\n\r\n\" >&3 && head -1 <&3 | grep -q 200'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  seed:
+    image: alpine:3.20
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_URL: http://api:8080
+      DEMO_EMAIL: ${DEMO_EMAIL:-demo@invoicehub.example}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-Demo#Pass2026}
+    volumes:
+      - ./docker/seed.sh:/seed.sh:ro
+    command: ["sh", "-c", "apk add --no-cache curl jq >/dev/null && sh /seed.sh"]
+    restart: "no"
+
+volumes:
+  sqldata:
