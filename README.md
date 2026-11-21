@@ -8,7 +8,7 @@ Multi-tenant GST invoicing REST API built with ASP.NET Core (.NET 8). Businesses
 
 | Area | State |
 |---|---|
-| API, multi-tenancy, auth, invoices, GST, reports, payments webhook, SignalR | Built and tested (`dotnet test`) |
+| API, multi-tenancy, auth, invoices, GST, reports, payments webhook, SignalR, PDF invoices | Built and tested (`dotnet test`) |
 | GitHub Actions CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) | Runs on every push and pull request to `main`: build (warnings are errors), vulnerable-package check, all unit and integration tests on `windows-latest` with LocalDB |
 | Azure DevOps pipeline ([azure-pipelines.yml](azure-pipelines.yml)) | Written. Its steps were rehearsed locally. **It has not yet run on Azure DevOps** |
 | Azure resources ([infra/provision.ps1](infra/provision.ps1)) | Written and syntax-checked. **Not yet run against Azure** |
@@ -44,6 +44,14 @@ Choices worth knowing about:
 - **CQRS with MediatR:** a pipeline behavior runs the FluentValidation validators before every handler. MediatR is pinned to 12.5.0, the last release under the Apache licence (13 and later need a licence key in production).
 - **`IApplicationDbContext` exposes EF `DbSet`s,** so the Application project references EF Core (without a database provider). This is a pragmatic choice over wrapping everything in repositories.
 - **Money rules live in the domain,** not in controllers: GST split, rounding, payment application and invoice status changes.
+
+## PDF invoices
+
+`GET /api/invoices/{id}/pdf` returns a GST tax invoice as a PDF (seller and buyer GSTIN, HSN per line, CGST + SGST or IGST by place of supply, totals, balance due and the grand total in words using lakh/crore). Another tenant's invoice is a 404, like every other read.
+
+![Sample invoice](docs/sample-invoice.png)
+
+[docs/sample-invoice.pdf](docs/sample-invoice.pdf) is a sample rendered from made-up data. PDFs are drawn with [QuestPDF](https://www.questpdf.com/), used under its **Community licence** (free for individuals and small organisations; `QuestPDF.Settings.License = LicenseType.Community` is set in `QuestPdfInvoiceRenderer`). It is not MIT, so check its licence terms before using this in a larger company. The rupee amounts print as "Rs" because the built-in PDF fonts have no rupee glyph.
 
 ## Getting started
 

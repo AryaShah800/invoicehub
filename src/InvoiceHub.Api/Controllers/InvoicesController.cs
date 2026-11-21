@@ -2,6 +2,7 @@ using InvoiceHub.Api.Auth;
 using InvoiceHub.Application.Invoices;
 using InvoiceHub.Application.Invoices.Commands.CreateInvoice;
 using InvoiceHub.Application.Invoices.Commands.IssueInvoice;
+using InvoiceHub.Application.Invoices.Pdf;
 using InvoiceHub.Application.Invoices.Queries.GetInvoiceById;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -34,4 +35,14 @@ public sealed class InvoicesController(ISender sender) : ControllerBase
     [ProducesResponseType(typeof(InvoiceDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct) =>
         Ok(await sender.Send(new GetInvoiceByIdQuery(id), ct));
+
+    /// <summary>Downloads the invoice as a GST tax invoice PDF. Another tenant's invoice is a 404.</summary>
+    [HttpGet("{id:guid}/pdf")]
+    [Produces("application/pdf")]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPdf(Guid id, CancellationToken ct)
+    {
+        var pdf = await sender.Send(new GetInvoicePdfQuery(id), ct);
+        return File(pdf.Content, "application/pdf", pdf.FileName);
+    }
 }
