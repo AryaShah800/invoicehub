@@ -1,0 +1,150 @@
+@page "/invoices/{Id:guid}"
+@implements IDisposable
+@inject IInvoiceApi Api
+@inject InvoiceEvents Events
+@inject IJSRuntime Js
+
+<PageTitle>@(_invoice?.InvoiceNumber ?? "Invoice") - InvoiceHub</PageTitle>
+
+<section class="page">
+    <p class="crumb"><a href="/invoices">Invoices</a></p>
+
+    @if (_error is not null && _invoice is null)
+    {
+        <h1>Invoice</h1>
+        <p class="form-error" role="alert">@_error</p>
+    }
+    else if (_invoice is null)
+    {
+        <p class="muted" aria-busy="true">Loading...</p>
+    }
+    else
+    {
+        var inv = _invoice;
+        <header class="page-head">
+            <div>
+                <h1><span class="serial">@inv.InvoiceNumber</span> <StatusBadge Status="@inv.Status" IsOverdue="@IsOverdue" /></h1>
+                <p class="muted">@inv.CustomerName. Issued @Money.Date(inv.IssueDate), due @Money.Date(inv.DueDate).</p>
+            </div>
+            <div class="actions">
+                @if (inv.Status == "Draft")
+                {
+                    <button type="button" class="btn" id="issue" disabled="@_busy" @onclick="IssueAsync">Issue invoice</button>
+                }
+                <button type="button" class="btn btn-primary" id="download-pdf" disabled="@_busy" @onclick="DownloadAsync">Download PDF</button>
+            </div>
+        </header>
+
+        @if (_error is not null)
+        {
+            <p class="form-error" role="alert">@_error</p>
+        }
+
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th scope="col">#</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">HSN</th>
+                        <th scope="col" class="num">Qty</th>
+                        <th scope="col" class="num">Rate</th>
+                        <th scope="col" class="num">GST</th>
+                        <th scope="col" class="num">Taxable</th>
+                        <th scope="col" class="num">@(inv.IsIntraState ? "CGST + SGST" : "IGST")</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var l in inv.Lines)
+                    {
+                        <tr>
+                            <td>@l.LineNumber</td>
+                            <td>@l.Description</td>
+                            <td class="serial">@l.HsnCode</td>
+                            <td class="num">@l.Quantity.ToString("0.##")</td>
+                            <td class="num">@Money.Format(l.UnitPrice)</td>
+                            <td class="num">@l.GstRate.ToString("0.##")%</td>
+                            <td class="num">@Money.Format(l.TaxableValue)</td>
+                            <td class="num">@Money.Format(l.CgstAmount + l.SgstAmount + l.IgstAmount)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <dl class="totals">
+            <div><dt>Taxable value</dt><dd>@Money.Format(inv.TaxableTotal)</dd></div>
+            @if (inv.IsIntraState)
+            {
+                <div><dt>CGST</dt><dd>@Money.Format(inv.CgstTotal)</dd></div>
+                <div><dt>SGST</dt><dd>@Money.Format(inv.SgstTotal)</dd></div>
+            }
+            else
+            {
+                <div><dt>IGST</dt><dd>@Money.Format(inv.IgstTotal)</dd></div>
+            }
+            <div class="grand"><dt>Total</dt><dd id="grand-total">@Money.Format(inv.GrandTotal)</dd></div>
+            <div><dt>Paid</dt><dd>@Money.Format(inv.AmountPaid)</dd></div>
+            <div><dt>Balance due</dt><dd id="balance-due">@Money.Format(inv.BalanceDue)</dd></div>
+        </dl>
+
+        @if (!string.IsNullOrWhiteSpace(inv.Notes))
+        {
+            <p class="notes"><span class="muted">Notes.</span> @inv.Notes</p>
+        }
+    }
+</section>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private InvoiceDto? _invoice;
+    private string? _error;
+    private bool _busy;
+
+    private bool IsOverdue => _invoice is { Status: "Issued" or "PartiallyPaid" } inv && inv.DueDate < DateOnly.FromDateTime(DateTime.UtcNow);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Events.PaymentReceived += OnPayment;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try { _invoice = await Api.GetInvoiceAsync(Id); _error = null; }
+        catch (ApiException ex) { _error = ex.Message; }
+        catch (HttpRequestException) { _error = "The InvoiceHub API is not reachable."; }
+    }
+
+    private async Task IssueAsync()
+    {
+        _busy = true;
+        try { _invoice = await Api.IssueInvoiceAsync(Id); _error = null; }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task DownloadAsync()
+    {
+        _busy = true;
+        try
+        {
+            var pdf = await Api.GetInvoicePdfAsync(Id);
+            using var stream = new MemoryStream(pdf);
+            using var reference = new DotNetStreamReference(stream);
+            await Js.InvokeVoidAsync("invoicehub.download", $"{_invoice!.InvoiceNumber}.pdf", reference);
+            _error = null;
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private void OnPayment(InvoiceHub.Application.Payments.PaymentReceivedMessage message)
+    {
+        if (message.InvoiceId == Id)
+            InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    }
+
+    public void Dispose() => Events.PaymentReceived -= OnPayment;
+}

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <base href="/" />
+    <title>InvoiceHub</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="app.css" />
+    <HeadOutlet @rendermode="NoPrerender" />
+</head>
+<body>
+    <Routes @rendermode="NoPrerender" />
+    <script src="_framework/blazor.web.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+
+@code {
+    // The sign-in token lives in browser session storage, which only exists once the circuit is interactive.
+    private static readonly InteractiveServerRenderMode NoPrerender = new(prerender: false);
+}
