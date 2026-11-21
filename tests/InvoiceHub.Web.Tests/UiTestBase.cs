@@ -29,6 +29,7 @@ public abstract class UiTestBase : TestContext
         Services.AddSingleton(Toasts);
         Services.AddSingleton(new ApiEndpoint(new Uri("http://api.test")));
         Services.AddSingleton<InvoiceEvents>();
+        Services.AddSingleton(DemoLogin.Off);
     }
 
     protected static InvoiceSummaryDto Summary(string number, string status = "Issued", bool overdue = false, decimal total = 1180m, string customer = "Acme Pvt Ltd") =>

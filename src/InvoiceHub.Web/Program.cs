@@ -7,6 +7,10 @@ builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
 var apiBase = builder.Configuration["Api:BaseUrl"] ?? "http://localhost:5080";
 builder.Services.AddSingleton(new ApiEndpoint(new Uri(apiBase)));
+builder.Services.AddSingleton(new DemoLogin(
+    builder.Configuration.GetValue<bool>("Demo:Enabled"),
+    builder.Configuration["Demo:Email"] ?? "demo@invoicehub.example",
+    builder.Configuration["Demo:Password"] ?? "Demo#Pass2026"));
 builder.Services.AddScoped<AuthSession>();
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<InvoiceEvents>();

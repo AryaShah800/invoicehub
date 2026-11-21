@@ -416,4 +416,29 @@ public sealed class LoginPageTests : UiTestBase
         cut.WaitForAssertion(() => Assert.True(Services.GetRequiredService<AuthSession>().IsSignedIn));
         Assert.Equal("token", Services.GetRequiredService<AuthSession>().Token);
     }
+
+    [Fact]
+    public void The_demo_panel_is_hidden_unless_demo_mode_is_on()
+    {
+        var cut = RenderComponent<Login>();
+
+        Assert.Empty(cut.FindAll(".demo-box"));
+        Assert.DoesNotContain("Use demo account", cut.Markup);
+    }
+
+    [Fact]
+    public void Demo_mode_shows_the_public_credentials_and_a_one_click_sign_in()
+    {
+        Services.AddSingleton(new DemoLogin(true, "demo@invoicehub.example", "Demo#Pass2026"));
+        Api.Setup(a => a.LoginAsync("demo@invoicehub.example", "Demo#Pass2026", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AuthResponse("demo-token", DateTime.UtcNow.AddHours(1), Guid.NewGuid(), Guid.NewGuid(), "demo@invoicehub.example", "Admin"));
+        var cut = RenderComponent<Login>();
+
+        Assert.Contains("demo@invoicehub.example", cut.Find(".demo-box").TextContent);
+        Assert.Contains("Demo#Pass2026", cut.Find(".demo-box").TextContent);
+
+        cut.Find("button.demo-login").Click();
+
+        cut.WaitForAssertion(() => Assert.Equal("demo-token", Services.GetRequiredService<AuthSession>().Token));
+    }
 }

@@ -189,6 +189,12 @@ input.invalid, select.invalid { border-color: var(--stamp); }
 .login-card { padding: 40px; display: grid; gap: 4px; align-content: center; }
 .login-card form { display: grid; gap: 16px; margin-top: 20px; }
 .login-brand { padding: 0; margin-bottom: 24px; }
+.demo-box { margin-top: 20px; padding: 14px; border: 1px dashed var(--line); border-radius: 8px; display: grid; gap: 10px; font-size: 0.9rem; }
+.demo-box p { margin: 0; }
+.demo-box dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; }
+.demo-box dt { color: var(--ink-3); }
+.demo-box dd { margin: 0; font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+.demo-box .btn { justify-self: start; }
 .login-side { background: var(--accent-soft); display: grid; place-content: center; justify-items: center; gap: 20px; padding: 24px; }
 .stamp { border: 3px solid var(--stamp); color: var(--stamp); font-weight: 800; letter-spacing: 0.12em; font-size: 1.8rem; padding: 4px 18px; border-radius: 6px; transform: rotate(-8deg); opacity: 0.85; }
 .serial-note { color: var(--ink-3); }

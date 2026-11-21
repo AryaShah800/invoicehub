@@ -1,0 +1,37 @@
+# Render Blueprint for the free public demo. Two free web services (512 MB each, ephemeral disk).
+# The API uses SQLite and seeds demo data; the Web UI (Blazor Server) calls the API over its public URL,
+# because free web services cannot receive private-network traffic.
+services:
+  - type: web
+    name: invoicehub-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.demo
+    dockerContext: .
+    healthCheckPath: /health/ready
+    envVars:
+      - key: Jwt__SigningKey
+        generateValue: true
+      - key: PaymentWebhook__Secret
+        generateValue: true
+      - key: Demo__ResetIntervalHours
+        value: "6"
+
+  - type: web
+    name: invoicehub
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.web.demo
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      # https://<service-name>.onrender.com. If Render adds a suffix because the name was taken, change this.
+      - key: Api__BaseUrl
+        value: https://invoicehub-api.onrender.com
+      # Public demo account shown on the login page. Must match the API's Demo__Email / Demo__Password (defaults are the same).
+      - key: Demo__Enabled
+        value: "true"
+      - key: Demo__Email
+        value: demo@invoicehub.example
+      - key: Demo__Password
+        value: Demo#Pass2026

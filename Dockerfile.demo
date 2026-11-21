@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1
+# Hosted-demo API image (Render free tier): SQLite instead of SQL Server, demo data seeded on start.
+# Listens on $PORT (Render sets it). The database file lives on the container's ephemeral disk.
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY global.json Directory.Build.props InvoiceHub.sln ./
+COPY src/InvoiceHub.Domain/*.csproj src/InvoiceHub.Domain/
+COPY src/InvoiceHub.Application/*.csproj src/InvoiceHub.Application/
+COPY src/InvoiceHub.Infrastructure/*.csproj src/InvoiceHub.Infrastructure/
+COPY src/InvoiceHub.Api/*.csproj src/InvoiceHub.Api/
+RUN dotnet restore src/InvoiceHub.Api/InvoiceHub.Api.csproj
+COPY src/ src/
+RUN dotnet publish src/InvoiceHub.Api/InvoiceHub.Api.csproj -c Release -o /app --no-restore
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+WORKDIR /app
+COPY --from=build /app .
+# The app runs as a non-root user: give it somewhere to write the database and logs.
+RUN mkdir -p /app/data /app/logs && chown -R $APP_UID /app/data /app/logs
+# No secrets here: Jwt__SigningKey and PaymentWebhook__Secret must be supplied by the host.
+ENV ASPNETCORE_ENVIRONMENT=Production \
+    Database__Provider=Sqlite \
+    ConnectionStrings__InvoiceHubSqlite="Data Source=/app/data/invoicehub.db" \
+    Demo__Enabled=true \
+    ForwardedHeaders__Enabled=true \
+    Https__RedirectDisabled=true \
+    Swagger__Enabled=true \
+    DOTNET_gcServer=0 \
+    DOTNET_TieredPGO=0
+USER $APP_UID
+ENTRYPOINT ["sh", "-c", "ASPNETCORE_URLS=http://+:${PORT:-8080} exec dotnet InvoiceHub.Api.dll"]
