@@ -53,6 +53,23 @@ Choices worth knowing about:
 
 [docs/sample-invoice.pdf](docs/sample-invoice.pdf) is a sample rendered from made-up data. PDFs are drawn with [QuestPDF](https://www.questpdf.com/), used under its **Community licence** (free for individuals and small organisations; `QuestPDF.Settings.License = LicenseType.Community` is set in `QuestPdfInvoiceRenderer`). It is not MIT, so check its licence terms before using this in a larger company. The rupee amounts print as "Rs" because the built-in PDF fonts have no rupee glyph.
 
+## Run it with one command (Docker)
+
+Needs Docker only (no .NET SDK, no LocalDB, works on Windows, macOS with amd64 emulation, Linux).
+
+```bash
+cp .env.example .env        # then edit the secrets if you like
+docker compose up --build
+```
+
+This starts SQL Server 2022 (`mcr.microsoft.com/mssql/server:2022-latest`), the API (migrations run on start), and a one-shot `seed` service that creates demo data through the public API: 4 customers (one in the seller's state, so CGST+SGST, three in other states, so IGST), 5 products and 60 invoices over about 11 months.
+
+- Swagger UI: http://localhost:8088/swagger (change the port with `API_PORT` in `.env`)
+- Health: http://localhost:8088/health/ready
+- Demo login (demo data only, set in `.env.example`): `demo@invoicehub.example` / `Demo#Pass2026`. Call `POST /api/auth/login`, paste the token into Swagger's Authorize button, then try `GET /api/reports/gst-summary?from=2025-01-01&to=2027-01-01`.
+
+Stop and delete the data with `docker compose down -v`. Secrets come from the git-ignored `.env`; the API still refuses to start without them.
+
 ## Getting started
 
 Prerequisites: .NET 8 SDK, SQL Server LocalDB, and the EF Core CLI (`dotnet tool install --global dotnet-ef --version 8.0.34`).
