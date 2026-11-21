@@ -13,6 +13,7 @@ using InvoiceHub.Infrastructure;
 using InvoiceHub.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
@@ -104,7 +105,14 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
+{
+    // Used by docker compose so a fresh database is created on first start.
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<InvoiceHub.Infrastructure.Persistence.InvoiceHubDbContext>().Database.MigrateAsync();
+}
+
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.UseSwagger();
     app.UseSwaggerUI();
@@ -114,7 +122,8 @@ app.UseSerilogRequestLogging(RequestLogging.Configure);
 app.UseExceptionHandler();
 if (!app.Environment.IsDevelopment())
     app.UseHsts(); // tells browsers to use HTTPS only; sent on HTTPS responses
-app.UseHttpsRedirection();
+if (!app.Configuration.GetValue<bool>("Https:RedirectDisabled"))
+    app.UseHttpsRedirection(); // the compose setup serves plain HTTP on 8080, TLS is the host's job
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
