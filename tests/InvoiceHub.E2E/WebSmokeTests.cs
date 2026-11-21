@@ -52,4 +52,21 @@ public class WebSmokeTests
 
         Assert.Empty(errors);
     }
+
+    /// <summary>Only meaningful against a demo-mode deployment (Demo__Enabled=true on the Web service).</summary>
+    [E2EFact]
+    public async Task Demo_mode_login_page_offers_a_one_click_demo_sign_in()
+    {
+        var baseUrl = Environment.GetEnvironmentVariable("E2E_WEB_URL")!.TrimEnd('/');
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new() { Channel = "msedge", Headless = true });
+        var page = await browser.NewPageAsync();
+
+        await page.GotoAsync(baseUrl + "/login");
+        await page.WaitForSelectorAsync(".demo-box");
+        await page.ClickAsync("button.demo-login");
+
+        await page.WaitForSelectorAsync("#kpi-overdue-count");
+        Assert.Contains("Dashboard", await page.InnerTextAsync("h1"));
+    }
 }
