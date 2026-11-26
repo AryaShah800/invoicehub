@@ -14,7 +14,7 @@ Multi-tenant GST invoicing REST API built with ASP.NET Core (.NET 8). Businesses
 | GitHub Actions CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) | Runs on every push and pull request to `main`: build (warnings are errors), vulnerable-package check, all unit and integration tests on `windows-latest` with LocalDB |
 | Azure DevOps pipeline ([azure-pipelines.yml](azure-pipelines.yml)) | Written. Its steps were rehearsed locally. **It has not yet run on Azure DevOps** |
 | Azure resources ([infra/provision.ps1](infra/provision.ps1)) | Written and syntax-checked. **Not yet run against Azure** |
-| Live deployment | **Not deployed yet.** There is no public URL |
+| Live deployment | Public demo on Render: <https://invoicehub-q7z9.onrender.com> (see [Hosted demo](#hosted-demo)). The Azure deployment below has not been run yet |
 | Web UI (Blazor Server, `src/InvoiceHub.Web`) | Built: login, dashboard, invoice list and detail, create invoice, live payment toast |
 | Tests | `dotnet test` on this branch (Release, run just before this README edit): 360 passed, 1 skipped (138 unit, 167 API integration, 55 UI component tests; the 1 skipped is the browser smoke test, which runs only when `E2E_WEB_URL` is set). Unit tests use Moq and FluentAssertions, UI tests use bUnit |
 
@@ -131,14 +131,6 @@ This starts SQL Server 2022 (`mcr.microsoft.com/mssql/server:2022-latest`), the 
 
 Stop and delete the data with `docker compose down -v`. Secrets come from the git-ignored `.env`; the API still refuses to start without them.
 
-## PDF invoices
-
-`GET /api/invoices/{id}/pdf` returns a GST tax invoice as a PDF (seller and buyer GSTIN, HSN per line, CGST + SGST or IGST by place of supply, totals, balance due and the grand total in words using lakh/crore). Another tenant's invoice is a 404, like every other read.
-
-![Sample invoice](docs/sample-invoice.png)
-
-[docs/sample-invoice.pdf](docs/sample-invoice.pdf) is a sample rendered from made-up data. PDFs are drawn with [QuestPDF](https://www.questpdf.com/), used under its **Community licence** (free for individuals and small organisations; `QuestPDF.Settings.License = LicenseType.Community` is set in `QuestPdfInvoiceRenderer`). It is not MIT, so check its licence terms before using this in a larger company. The rupee amounts print as "Rs" because the built-in PDF fonts have no rupee glyph.
-
 ## Getting started
 
 Prerequisites: .NET 8 SDK, SQL Server LocalDB, and the EF Core CLI (`dotnet tool install --global dotnet-ef --version 8.0.34`).
@@ -191,11 +183,13 @@ Tokens carry `sub`, `email`, `tenant_id` and `role` claims. The tenant for every
 | Endpoint | Access | Purpose |
 |---|---|---|
 | `POST /api/customers` | any tenant user | Add a buyer. The state code decides the place of supply; a GSTIN, if given, must match the state |
+| `GET /api/customers` | any tenant user | Page through your customers (`page`, `pageSize`, `search`) |
 | `GET /api/customers/{id}` | any tenant user | Another tenant's customer is a 404 |
 | `POST /api/products` | Admin only | Add a catalogue item with its HSN/SAC code, unit price and GST slab |
+| `GET /api/products` | any tenant user | Page through the catalogue |
 | `GET /api/products/{id}` | any tenant user | Another tenant's product is a 404 |
 
-There are no list, update or delete endpoints yet.
+There are no update or delete endpoints yet.
 
 ## Invoices
 
@@ -203,7 +197,10 @@ There are no list, update or delete endpoints yet.
 |---|---|
 | `POST /api/invoices` | Create a draft invoice for one of your customers |
 | `POST /api/invoices/{id}/issue` | Issue a draft invoice. It then cannot be edited and can receive payments |
+| `GET /api/invoices` | Page through invoices, filtered by status or overdue |
 | `GET /api/invoices/{id}` | Get an invoice with its lines (another tenant's invoice is a 404) |
+| `GET /api/invoices/{id}/pdf` | Download the GST tax invoice as a PDF |
+| `GET /api/dashboard` | Totals for the dashboard: billed, outstanding, overdue and the GST split |
 
 An invoice line is either a **catalogue line** (`productId` plus `quantity`; price, HSN code and GST rate come from the product and cannot be overridden) or a **custom line** (`description`, `hsnCode`, `unitPrice`, `gstRate`).
 

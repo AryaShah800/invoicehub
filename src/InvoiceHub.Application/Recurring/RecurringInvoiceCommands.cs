@@ -38,7 +38,8 @@ public sealed class CreateRecurringInvoiceCommandValidator : AbstractValidator<C
         RuleForEach(c => c.Lines).ChildRules(line =>
         {
             line.RuleFor(l => l.ProductId).NotEmpty();
-            line.RuleFor(l => l.Quantity).GreaterThan(0).LessThanOrEqualTo(1_000_000m);
+            line.RuleFor(l => l.Quantity).GreaterThan(0).LessThanOrEqualTo(1_000_000m)
+                .PrecisionScale(18, 3, ignoreTrailingZeros: true);
         });
     }
 }
