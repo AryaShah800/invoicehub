@@ -32,9 +32,12 @@ public sealed class CreateInvoiceCommandValidator : AbstractValidator<CreateInvo
 
         RuleForEach(c => c.Lines).ChildRules(line =>
         {
+            // Must fit decimal(18,3) / decimal(18,2), or the database rounds the stored value
+            // and Quantity x UnitPrice stops matching the taxable value computed here.
             line.RuleFor(l => l.Quantity)
                 .GreaterThan(0)
-                .LessThanOrEqualTo(MaxQuantity);
+                .LessThanOrEqualTo(MaxQuantity)
+                .PrecisionScale(18, 3, ignoreTrailingZeros: true);
 
             // Catalogue line: everything but the quantity comes from the product, so nothing else may be sent.
             line.When(l => l.ProductId.HasValue, () =>
@@ -57,7 +60,8 @@ public sealed class CreateInvoiceCommandValidator : AbstractValidator<CreateInvo
                     .Matches(@"^(\d{4}|\d{6}|\d{8})$").WithMessage("HSN code must be 4, 6 or 8 digits.");
                 line.RuleFor(l => l.UnitPrice)
                     .NotNull().WithMessage("A custom line needs a unit price.")
-                    .GreaterThanOrEqualTo(0).LessThanOrEqualTo(MaxUnitPrice);
+                    .GreaterThanOrEqualTo(0).LessThanOrEqualTo(MaxUnitPrice)
+                    .PrecisionScale(18, 2, ignoreTrailingZeros: true);
                 line.RuleFor(l => l.GstRate)
                     .NotNull().WithMessage("A custom line needs a GST rate.")
                     .Must(rate => rate is null || GstRules.ValidRates.Contains(rate.Value))

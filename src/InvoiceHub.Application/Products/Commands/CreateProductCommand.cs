@@ -14,7 +14,7 @@ public sealed class CreateProductCommandValidator : AbstractValidator<CreateProd
     {
         RuleFor(p => p.Name).NotEmpty().MaximumLength(Product.NameMaxLength);
         RuleFor(p => p.HsnCode).NotEmpty().Matches(@"^(\d{4}|\d{6}|\d{8})$").WithMessage("'Hsn Code' must be 4, 6 or 8 digits.");
-        RuleFor(p => p.UnitPrice).GreaterThanOrEqualTo(0);
+        RuleFor(p => p.UnitPrice).GreaterThanOrEqualTo(0).PrecisionScale(18, 2, ignoreTrailingZeros: true);
         RuleFor(p => p.GstRate).Must(GstRules.ValidRates.Contains).WithMessage("'Gst Rate' must be a GST slab: 0, 0.25, 3, 5, 12, 18 or 28.");
     }
 }

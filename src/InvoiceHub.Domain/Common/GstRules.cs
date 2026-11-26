@@ -16,6 +16,10 @@ public static partial class GstRules
         var code = Guard.NotBlank(value, "State code", 2);
         if (!StateCodeRegex().IsMatch(code))
             throw new DomainException("State code must be two digits.");
+        // GST state/UT codes run 01-38; 97 is "Other Territory". Codes such as 00 or 99 are not states.
+        var number = int.Parse(code, System.Globalization.CultureInfo.InvariantCulture);
+        if (number is < 1 or > 38 && number != 97)
+            throw new DomainException($"{code} is not a GST state code (01-38 or 97).");
 
         return code;
     }

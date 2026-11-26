@@ -32,7 +32,8 @@ public sealed class TenantWriteGuardInterceptor(ITenantProvider tenantProvider) 
         var currentTenantId = tenantProvider.TenantId;
         foreach (var entry in context.ChangeTracker.Entries<ITenantOwned>())
         {
-            if (entry.State is not (EntityState.Added or EntityState.Modified))
+            // Deletes are checked too: removing another tenant's row is as bad as editing it.
+            if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
                 continue;
 
             if (currentTenantId is null || entry.Entity.TenantId != currentTenantId)
