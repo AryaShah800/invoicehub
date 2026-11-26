@@ -1,3 +1,4 @@
+using InvoiceHub.Application.Dashboard;
 using InvoiceHub.Application.Reports;
 using InvoiceHub.Domain.Customers;
 using InvoiceHub.Domain.Invoices;
@@ -45,6 +46,30 @@ public sealed class SqliteProviderTests : IDisposable
             invoice.Issue();
         db.Invoices.Add(invoice);
         db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task Dashboard_query_runs_on_sqlite_and_sums_line_amounts()
+    {
+        // The hosted demo uses SQLite, which cannot SUM decimals in SQL; the dashboard must still work there.
+        var (tenant, customer, p5, _, p18) = SeedCatalogue(customerState: "29");
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var thisMonth = new DateOnly(today.Year, today.Month, 1);
+        AddInvoice(tenant, customer, "S-1", thisMonth, issue: true, (p5, 2m), (p18, 1m));
+        AddInvoice(tenant, customer, "S-2", thisMonth, issue: false, (p5, 1m));
+
+        using var db = _db.CreateContext(new FakeTenantProvider { TenantId = tenant.Id });
+        var summary = await new GetDashboardQueryHandler(db, TimeProvider.System)
+            .Handle(new GetDashboardQuery(3), CancellationToken.None);
+
+        // Interstate (27 -> 29): IGST only. 2 x 410 at 5% + 1 x 1499 at 18%.
+        var current = summary.Months[^1];
+        Assert.Equal(1, current.InvoiceCount);
+        Assert.Equal(820m + 1499m, current.Taxable);
+        Assert.Equal(41m + 269.82m, summary.Igst);
+        Assert.Equal(0m, summary.Cgst);
+        Assert.Equal(1, summary.DraftCount);
+        Assert.Equal(current.Total, summary.OutstandingAmount);
     }
 
     [Fact]
