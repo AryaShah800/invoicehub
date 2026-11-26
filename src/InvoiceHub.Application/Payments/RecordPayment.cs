@@ -88,7 +88,29 @@ public sealed class RecordPaymentCommandHandler(
         var receivedAt = timeProvider.GetUtcNow().UtcDateTime;
         var payment = invoice.RecordPayment(request.EventId, request.Amount, request.Reference, receivedAt);
         db.Payments.Add(payment);
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Two deliveries of the same event raced: both passed the check above, and the loser hit
+            // the unique (TenantId, EventId) index or the invoice's row version. If the winner applied
+            // this event, answer like any other retry instead of a 409, so the provider stops retrying.
+            var winner = await db.Payments
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.EventId == request.EventId, cancellationToken);
+            if (winner is null)
+                throw;
+            if (winner.InvoiceId != invoice.Id)
+                throw new ConflictException($"Event '{request.EventId}' was already used for a different invoice.");
+
+            var current = await db.Invoices
+                .AsNoTracking()
+                .Include(i => i.Lines)
+                .FirstAsync(i => i.Id == request.InvoiceId, cancellationToken);
+            return ToResult(current, duplicate: true);
+        }
 
         await NotifyAsync(invoice, payment, cancellationToken);
         return ToResult(invoice, duplicate: false);

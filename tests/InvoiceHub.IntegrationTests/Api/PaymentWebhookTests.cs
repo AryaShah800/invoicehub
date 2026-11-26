@@ -140,6 +140,21 @@ public sealed partial class PaymentWebhookTests(ApiFactory factory)
     }
 
     [Fact]
+    public async Task Simultaneous_deliveries_of_one_event_are_all_acknowledged_and_applied_once()
+    {
+        var setup = await NewInvoiceAsync();
+        var body = Body(setup.Invoice.Id, 500m, eventId: "evt_raced");
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => SendSignedAsync(body)));
+
+        Assert.All(responses, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+        var results = await Task.WhenAll(responses.Select(r => r.Content.ReadFromJsonAsync<RecordPaymentResult>()));
+        Assert.Equal(1, results.Count(r => !r!.Duplicate));
+        Assert.Equal(500m, (await GetInvoiceAsync(setup)).AmountPaid);
+        Assert.Equal(1, await PaymentCountAsync(setup));
+    }
+
+    [Fact]
     public async Task An_event_id_cannot_be_reused_for_a_different_invoice_of_the_same_tenant()
     {
         var first = await NewInvoiceAsync();
