@@ -34,7 +34,9 @@ public sealed class DashboardTests(ApiFactory factory)
             }
             var thisMonth = new DateOnly(Today.Year, Today.Month, 1);
             db.AddRange(
-                Make("D-1", thisMonth, thisMonth.AddDays(20), true),                               // billed, maybe not overdue
+                // Due a week from today, so it is never overdue. "thisMonth + 20 days" made this test
+                // fail after the 21st of every month.
+                Make("D-1", thisMonth, Today.AddDays(7), true),                                    // billed, not overdue
                 Make("D-2", thisMonth.AddMonths(-1), thisMonth.AddMonths(-1).AddDays(5), true),    // billed, overdue
                 Make("D-3", thisMonth, thisMonth.AddDays(20), false));                             // draft: excluded
             await db.SaveChangesAsync();
