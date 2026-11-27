@@ -15,19 +15,40 @@
 </div>
 
 @code {
+    /// <summary>How long a toast stays before it dismisses itself.</summary>
+    [Parameter] public TimeSpan Lifetime { get; set; } = TimeSpan.FromSeconds(8);
+
     private readonly HashSet<Guid> _timed = [];
+    // Cancelled when the component goes away (page left, circuit closed), so pending timers
+    // stop instead of calling InvokeAsync on a renderer that no longer exists.
+    private readonly CancellationTokenSource _disposed = new();
 
     protected override void OnInitialized() => Service.Changed += OnChanged;
 
     private void OnChanged()
     {
-        foreach (var toast in Service.Toasts.Where(t => _timed.Add(t.Id)).ToList())
-        {
-            var id = toast.Id;
-            _ = Task.Delay(TimeSpan.FromSeconds(8)).ContinueWith(_ => InvokeAsync(() => Service.Dismiss(id)));
-        }
+        var current = Service.Toasts.Select(t => t.Id).ToHashSet();
+        _timed.IntersectWith(current); // forget toasts that are already gone
+        foreach (var id in current.Where(_timed.Add).ToList())
+            _ = DismissLaterAsync(id);
         InvokeAsync(StateHasChanged);
     }
 
-    public void Dispose() => Service.Changed -= OnChanged;
+    private async Task DismissLaterAsync(Guid id)
+    {
+        try
+        {
+            await Task.Delay(Lifetime, _disposed.Token);
+            await InvokeAsync(() => Service.Dismiss(id));
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+
+    public void Dispose()
+    {
+        Service.Changed -= OnChanged;
+        _disposed.Cancel();
+        _disposed.Dispose();
+    }
 }
