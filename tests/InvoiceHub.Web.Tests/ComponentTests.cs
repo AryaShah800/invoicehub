@@ -428,6 +428,27 @@ public sealed class NewInvoicePageTests : UiTestBase
     }
 
     [Fact]
+    public void A_bad_line_is_marked_next_to_that_line()
+    {
+        var cut = RenderComponent<NewInvoice>();
+        cut.WaitForAssertion(() => cut.Find("form"));
+        cut.Find("#product-0").Change(ProductId.ToString());
+        cut.Find("#add-line").Click();
+        cut.Find("#qty-1").Change("0");
+
+        cut.Find("form").Submit();
+
+        // Line 1 is fine; line 2 has no product and a zero quantity, shown under line 2 and linked to its inputs.
+        Assert.Empty(cut.FindAll("#line-errors-0"));
+        var errors = cut.Find("#line-errors-1").TextContent;
+        Assert.Contains("Line 2: choose a product.", errors);
+        Assert.Contains("Line 2: quantity must be more than zero.", errors);
+        Assert.Equal("line-errors-1", cut.Find("#qty-1").GetAttribute("aria-describedby"));
+        Assert.Equal("line-errors-1", cut.Find("#product-1").GetAttribute("aria-describedby"));
+        Assert.Null(cut.Find("#product-0").GetAttribute("aria-describedby"));
+    }
+
+    [Fact]
     public void A_valid_form_creates_the_draft_and_opens_it()
     {
         var created = Invoice(Guid.NewGuid());

@@ -59,10 +59,14 @@
                 {
                     var line = _form.Lines[i];
                     var index = i;
+                    // Line rules are reported against Lines as a whole; show each line's own messages next to it.
+                    var lineErrors = context.GetValidationMessages(() => _form.Lines)
+                        .Where(m => m.StartsWith($"Line {index + 1}:", StringComparison.Ordinal)).ToList();
+                    var errorsId = lineErrors.Count > 0 ? $"line-errors-{index}" : null;
                     <div class="line-row" @key="line">
                         <div class="field">
                             <label for="product-@index">Product</label>
-                            <InputSelect id="@($"product-{index}")" @bind-Value="line.ProductId">
+                            <InputSelect id="@($"product-{index}")" @bind-Value="line.ProductId" aria-describedby="@errorsId">
                                 <option value="">Choose a product</option>
                                 @foreach (var p in _products)
                                 {
@@ -72,10 +76,16 @@
                         </div>
                         <div class="field field-qty">
                             <label for="qty-@index">Quantity</label>
-                            <InputNumber id="@($"qty-{index}")" @bind-Value="line.Quantity" />
+                            <InputNumber id="@($"qty-{index}")" @bind-Value="line.Quantity" aria-describedby="@errorsId" />
                         </div>
                         <div class="line-total">@LineTotal(line)</div>
                         <button type="button" class="link" aria-label="Remove line @(index + 1)" disabled="@(_form.Lines.Count == 1)" @onclick="() => _form.Lines.RemoveAt(index)">Remove</button>
+                        @if (errorsId is not null)
+                        {
+                            <ul class="line-errors" id="@errorsId">
+                                @foreach (var message in lineErrors) { <li class="validation-message">@message</li> }
+                            </ul>
+                        }
                     </div>
                 }
                 <button type="button" class="btn" id="add-line" @onclick="() => _form.Lines.Add(new LineForm())">Add line</button>
