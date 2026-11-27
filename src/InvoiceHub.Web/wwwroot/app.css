@@ -218,3 +218,6 @@ input.invalid, select.invalid { border-color: var(--stamp); }
 @media (prefers-reduced-motion: no-preference) {
   .btn, .rail nav a { transition: background-color .12s, border-color .12s; }
 }
+
+/* A line's own validation messages, under that line. */
+.line-errors { grid-column: 1 / -1; margin: 0; padding-left: 1rem; }
