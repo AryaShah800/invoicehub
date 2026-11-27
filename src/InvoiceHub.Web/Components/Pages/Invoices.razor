@@ -118,15 +118,15 @@
     private DateTime? _to;
     private bool _overdueOnly;
     private int _pageNo = 1;
+    private string? _appliedQuery;
 
     protected override async Task OnInitializedAsync()
     {
         Events.PaymentReceived += OnPayment;
+        Nav.LocationChanged += OnLocationChanged;
 
         // The dashboard links here with ?status=Draft.
-        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
-        if (query.TryGetValue("status", out var status)) _status = status.ToString();
-        if (query.TryGetValue("overdue", out var overdue)) _overdueOnly = overdue == "true";
+        ApplyQuery(Nav.Uri);
 
         try { _customers = await Api.ListCustomersAsync(); }
         catch (ApiException) { /* the filter just has no customers; the list below reports the real error */ }
@@ -151,6 +151,33 @@
 
     private Task ApplyAsync() { _pageNo = 1; return LoadAsync(); }
 
+    /// <summary>
+    /// Sets the filters from ?status= and ?overdue=. Blazor reuses this page when a link points at /invoices again
+    /// (the nav menu, or the dashboard while already here), so OnInitialized does not run a second time; without this
+    /// the old filter stayed on screen while the address bar showed another one. Returns false if the query is unchanged.
+    /// </summary>
+    private bool ApplyQuery(string uri)
+    {
+        var queryString = new Uri(uri).Query;
+        if (queryString == _appliedQuery) return false;
+        _appliedQuery = queryString;
+
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(queryString);
+        _status = query.TryGetValue("status", out var status) ? status.ToString() : "";
+        _overdueOnly = query.TryGetValue("overdue", out var overdue) && overdue == "true";
+        _customerId = "";
+        _from = _to = null;
+        _pageNo = 1;
+        return true;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        var path = new Uri(e.Location).AbsolutePath.TrimEnd('/');
+        if (!path.Equals("/invoices", StringComparison.OrdinalIgnoreCase) || !ApplyQuery(e.Location)) return;
+        InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    }
+
     private Task GoToAsync(int page) { _pageNo = page; return LoadAsync(); }
 
     private Task ResetAsync()
@@ -164,5 +191,9 @@
     private void OnPayment(InvoiceHub.Application.Payments.PaymentReceivedMessage _) =>
         InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
 
-    public void Dispose() => Events.PaymentReceived -= OnPayment;
+    public void Dispose()
+    {
+        Events.PaymentReceived -= OnPayment;
+        Nav.LocationChanged -= OnLocationChanged;
+    }
 }
