@@ -60,6 +60,16 @@ public sealed class SharedComponentTests : UiTestBase
     }
 
     [Fact]
+    public void The_layout_shows_a_loading_message_instead_of_a_blank_page_before_the_session_loads()
+    {
+        var cut = RenderComponent<InvoiceHub.Web.Components.Layout.MainLayout>(p =>
+            p.Add(c => c.Body, (Microsoft.AspNetCore.Components.RenderFragment)(b => b.AddContent(0, "page"))));
+
+        Assert.Contains("Loading InvoiceHub", cut.Markup);
+        Assert.NotNull(cut.Find("[role=status]"));
+    }
+
+    [Fact]
     public void Toast_component_lists_toasts_and_dismisses_them()
     {
         var cut = RenderComponent<Toasts>();
@@ -69,6 +79,29 @@ public sealed class SharedComponentTests : UiTestBase
         cut.Find("button").Click();
 
         Assert.DoesNotContain("Invoice INV-1 paid", cut.Markup);
+    }
+
+    [Fact]
+    public void A_toast_dismisses_itself_after_its_lifetime()
+    {
+        var cut = RenderComponent<Toasts>(p => p.Add(c => c.Lifetime, TimeSpan.FromMilliseconds(50)));
+        Toasts.Show("Saved", "Draft saved");
+        cut.WaitForAssertion(() => Assert.Contains("Saved", cut.Markup));
+
+        cut.WaitForAssertion(() => Assert.Empty(Toasts.Toasts), TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
+    public async Task Leaving_the_page_cancels_pending_dismiss_timers()
+    {
+        var cut = RenderComponent<Toasts>(p => p.Add(c => c.Lifetime, TimeSpan.FromMilliseconds(100)));
+        Toasts.Show("Saved", "Draft saved");
+
+        DisposeComponents(); // the component is gone, e.g. the circuit closed
+        await Task.Delay(300);
+
+        // The timer was cancelled with the component: nothing ran against the disposed renderer.
+        Assert.Single(Toasts.Toasts);
     }
 
     [Fact]
