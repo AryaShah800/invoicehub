@@ -60,6 +60,16 @@ public sealed class SharedComponentTests : UiTestBase
     }
 
     [Fact]
+    public void The_layout_shows_a_loading_message_instead_of_a_blank_page_before_the_session_loads()
+    {
+        var cut = RenderComponent<InvoiceHub.Web.Components.Layout.MainLayout>(p =>
+            p.Add(c => c.Body, (Microsoft.AspNetCore.Components.RenderFragment)(b => b.AddContent(0, "page"))));
+
+        Assert.Contains("Loading InvoiceHub", cut.Markup);
+        Assert.NotNull(cut.Find("[role=status]"));
+    }
+
+    [Fact]
     public void Toast_component_lists_toasts_and_dismisses_them()
     {
         var cut = RenderComponent<Toasts>();

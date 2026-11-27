@@ -6,6 +6,7 @@
 
 @if (_ready)
 {
+    <a class="skip-link" href="#main">Skip to main content</a>
     <div class="shell">
         <aside class="rail">
             <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">IH</span><span>InvoiceHub</span></a>
@@ -19,9 +20,17 @@
                 <button type="button" class="link" @onclick="SignOut">Sign out</button>
             </div>
         </aside>
-        <main class="main" id="main">@Body</main>
+        <main class="main" id="main" tabindex="-1">@Body</main>
     </div>
     <Toasts />
+}
+else
+{
+    @* The session is read from browser storage after the first render; show something instead of a blank page. *@
+    <div class="boot" role="status" aria-live="polite">
+        <span class="brand-mark" aria-hidden="true">IH</span>
+        <p class="muted">Loading InvoiceHub…</p>
+    </div>
 }
 
 @code {
