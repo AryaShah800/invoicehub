@@ -163,7 +163,8 @@ The default connection string in `src/InvoiceHub.Api/appsettings.json` points at
 | `PaymentWebhook:ToleranceSeconds` | How far a webhook timestamp may be from the server clock | 300 |
 | `RateLimiting:AuthPermitsPerMinute` | Register and login requests per client address per minute | 10 |
 | `RateLimiting:WebhookPermitsPerMinute` | Webhook requests per client address per minute | 300 |
-| `BackgroundJobs:Enabled`, `IntervalMinutes`, `UtcOffsetMinutes` | The overdue and recurring-invoice job: on or off, how often it wakes, and the business time zone that decides what "today" is | `true`, 60, 330 (India) |
+| `BackgroundJobs:Enabled`, `IntervalMinutes` | The overdue and recurring-invoice job: on or off and how often it wakes | `true`, 60 |
+| `BusinessCalendar:UtcOffsetMinutes` | Shared business date for overdue checks, dashboard months and new invoice defaults. Set the same value in API and Web. Falls back to `BackgroundJobs:UtcOffsetMinutes` for existing deployments | 330 (India) |
 | `Serilog:*` | Log levels and sinks | console plus rolling JSON file in `logs/` |
 | `AllowedHosts` | Host names the app answers to | `*` (set it in production) |
 
@@ -283,7 +284,7 @@ A hosted service (`InvoiceMaintenanceWorker`) wakes every `BackgroundJobs:Interv
 Design notes:
 
 - **Idempotent.** Each occurrence has a deterministic invoice number (`R` + 6 hex characters of the template id + `-yyMMdd`), unique per tenant. Running the job twice, or two instances at once, cannot create the same invoice twice, and a crash between saving the invoice and moving the template forward is repaired on the next run. Templates carry a row version for the same reason.
-- **Testable time.** The logic lives in `InvoiceMaintenanceService` (Application project) and takes the date as an argument; the worker only decides what "today" is from an injected `TimeProvider` and `BackgroundJobs:UtcOffsetMinutes`. Tests run it for chosen dates and never depend on the wall clock.
+- **Testable time.** The logic lives in `InvoiceMaintenanceService` (Application project) and takes the date as an argument. The worker, dashboard, invoice queries and new-invoice form share `IBusinessClock`, backed by `TimeProvider` and `BusinessCalendar:UtcOffsetMinutes` (with `BackgroundJobs:UtcOffsetMinutes` as a fallback). Tests can freeze time at the business midnight boundary.
 - **Tenant scope without a user.** There is no signed-in user in a background service, so each unit of work gets its own DI scope with the tenant assigned first. The tenant query filters and the write guard stay in force, and a failing tenant or template is logged and skipped without stopping the rest.
 - **Pluggable notifier.** `IInvoiceEventNotifier` is implemented with SignalR today. An email or SMS implementation can be added without touching the job.
 

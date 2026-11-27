@@ -1,9 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
+using InvoiceHub.Application.Abstractions;
 using InvoiceHub.Application.Dashboard;
 using InvoiceHub.Domain.Customers;
 using InvoiceHub.Domain.Invoices;
 using InvoiceHub.Domain.Products;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace InvoiceHub.IntegrationTests.Api;
 
@@ -12,7 +14,7 @@ public sealed class DashboardTests(ApiFactory factory)
 {
     private readonly HttpClient _client = factory.CreateClient();
 
-    private static DateOnly Today => DateOnly.FromDateTime(DateTime.UtcNow);
+    private DateOnly Today => factory.Services.GetRequiredService<IBusinessClock>().Today();
 
     [Fact]
     public async Task Dashboard_sums_billed_value_by_month_and_counts_overdue()

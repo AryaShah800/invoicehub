@@ -1,4 +1,7 @@
+using InvoiceHub.Application.Common;
 using InvoiceHub.Application.Dashboard;
+using InvoiceHub.Application.Invoices.Queries.GetInvoiceById;
+using InvoiceHub.Application.Invoices.Queries.ListInvoices;
 using InvoiceHub.Application.Reports;
 using InvoiceHub.Domain.Customers;
 using InvoiceHub.Domain.Invoices;
@@ -7,6 +10,8 @@ using InvoiceHub.Domain.Tenants;
 using InvoiceHub.Infrastructure.Reports;
 using InvoiceHub.IntegrationTests.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 
 namespace InvoiceHub.IntegrationTests.Sqlite;
 
@@ -53,13 +58,14 @@ public sealed class SqliteProviderTests : IDisposable
     {
         // The hosted demo uses SQLite, which cannot SUM decimals in SQL; the dashboard must still work there.
         var (tenant, customer, p5, _, p18) = SeedCatalogue(customerState: "29");
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var clock = new BusinessClock(TimeProvider.System, Options.Create(new BusinessCalendarOptions()));
+        var today = clock.Today();
         var thisMonth = new DateOnly(today.Year, today.Month, 1);
         AddInvoice(tenant, customer, "S-1", thisMonth, issue: true, (p5, 2m), (p18, 1m));
         AddInvoice(tenant, customer, "S-2", thisMonth, issue: false, (p5, 1m));
 
         using var db = _db.CreateContext(new FakeTenantProvider { TenantId = tenant.Id });
-        var summary = await new GetDashboardQueryHandler(db, TimeProvider.System)
+        var summary = await new GetDashboardQueryHandler(db, clock)
             .Handle(new GetDashboardQuery(3), CancellationToken.None);
 
         // Interstate (27 -> 29): IGST only. 2 x 410 at 5% + 1 x 1499 at 18%.
@@ -70,6 +76,59 @@ public sealed class SqliteProviderTests : IDisposable
         Assert.Equal(0m, summary.Cgst);
         Assert.Equal(1, summary.DraftCount);
         Assert.Equal(current.Total, summary.OutstandingAmount);
+    }
+
+    [Fact]
+    public async Task Dashboard_list_and_detail_agree_after_midnight_IST_before_midnight_UTC()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 11, 26, 19, 0, 0, TimeSpan.Zero));
+        var clock = new BusinessClock(time, Options.Create(new BusinessCalendarOptions()));
+        var (tenant, customer, p5, _, _) = SeedCatalogue();
+        // AddInvoice sets the due date to 15 days after issue: November 26 and November 27.
+        AddInvoice(tenant, customer, "OVERDUE", new DateOnly(2026, 11, 11), true, (p5, 1m));
+        AddInvoice(tenant, customer, "DUE-TODAY", new DateOnly(2026, 11, 12), true, (p5, 1m));
+        AddInvoice(tenant, customer, "DRAFT", new DateOnly(2026, 11, 11), false, (p5, 1m));
+        using var db = _db.CreateContext(new FakeTenantProvider { TenantId = tenant.Id });
+
+        var dashboard = await new GetDashboardQueryHandler(db, clock)
+            .Handle(new GetDashboardQuery(), CancellationToken.None);
+        var overdue = await new ListInvoicesQueryHandler(db, clock)
+            .Handle(new ListInvoicesQuery(Overdue: true), CancellationToken.None);
+        var notOverdue = await new ListInvoicesQueryHandler(db, clock)
+            .Handle(new ListInvoicesQuery(Overdue: false), CancellationToken.None);
+        var listed = Assert.Single(overdue.Items);
+        var detail = await new GetInvoiceByIdQueryHandler(db, clock)
+            .Handle(new GetInvoiceByIdQuery(listed.Id), CancellationToken.None);
+
+        Assert.Equal(new DateOnly(2026, 11, 27), clock.Today());
+        Assert.Equal(1, dashboard.OverdueCount);
+        Assert.Equal(430.50m, dashboard.OverdueAmount);
+        Assert.Equal("OVERDUE", listed.InvoiceNumber);
+        Assert.True(listed.IsOverdue);
+        Assert.True(detail.IsOverdue);
+        Assert.Equal(new DateOnly(2026, 11, 26), detail.DueDate);
+        Assert.Equal(2, notOverdue.Items.Count);
+        Assert.All(notOverdue.Items, invoice => Assert.False(invoice.IsOverdue));
+    }
+
+    [Fact]
+    public async Task Dashboard_month_window_starts_the_new_month_at_midnight_IST()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 11, 30, 19, 0, 0, TimeSpan.Zero));
+        var clock = new BusinessClock(time, Options.Create(new BusinessCalendarOptions()));
+        var (tenant, customer, p5, _, _) = SeedCatalogue();
+        AddInvoice(tenant, customer, "DECEMBER", new DateOnly(2026, 12, 1), true, (p5, 1m));
+        AddInvoice(tenant, customer, "NOVEMBER", new DateOnly(2026, 11, 30), true, (p5, 2m));
+        using var db = _db.CreateContext(new FakeTenantProvider { TenantId = tenant.Id });
+
+        var dashboard = await new GetDashboardQueryHandler(db, clock)
+            .Handle(new GetDashboardQuery(1), CancellationToken.None);
+
+        var month = Assert.Single(dashboard.Months);
+        Assert.Equal(2026, month.Year);
+        Assert.Equal(12, month.Month);
+        Assert.Equal(1, month.InvoiceCount);
+        Assert.Equal(430.50m, month.Total);
     }
 
     [Fact]

@@ -44,12 +44,12 @@ public sealed class ListInvoicesQueryValidator : AbstractValidator<ListInvoicesQ
     }
 }
 
-public sealed class ListInvoicesQueryHandler(IApplicationDbContext db, TimeProvider clock)
+public sealed class ListInvoicesQueryHandler(IApplicationDbContext db, IBusinessClock clock)
     : IRequestHandler<ListInvoicesQuery, PagedResult<InvoiceSummaryDto>>
 {
     public async Task<PagedResult<InvoiceSummaryDto>> Handle(ListInvoicesQuery request, CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var today = clock.Today();
         var issued = InvoiceStatus.Issued;
         var partly = InvoiceStatus.PartiallyPaid;
 

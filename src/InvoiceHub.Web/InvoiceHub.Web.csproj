@@ -9,7 +9,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Shared request/response records only. The UI talks to the API over HTTP, never to the database. -->
+    <!-- Shared request/response records and business clock. The UI talks to the API over HTTP, never to the database. -->
     <ProjectReference Include="..\InvoiceHub.Application\InvoiceHub.Application.csproj" />
   </ItemGroup>
 

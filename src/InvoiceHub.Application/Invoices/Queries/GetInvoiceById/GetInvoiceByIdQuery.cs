@@ -14,7 +14,7 @@ public sealed class GetInvoiceByIdQueryValidator : AbstractValidator<GetInvoiceB
     public GetInvoiceByIdQueryValidator() => RuleFor(q => q.Id).NotEmpty();
 }
 
-public sealed class GetInvoiceByIdQueryHandler(IApplicationDbContext db)
+public sealed class GetInvoiceByIdQueryHandler(IApplicationDbContext db, IBusinessClock clock)
     : IRequestHandler<GetInvoiceByIdQuery, InvoiceDto>
 {
     public async Task<InvoiceDto> Handle(GetInvoiceByIdQuery request, CancellationToken cancellationToken)
@@ -32,6 +32,6 @@ public sealed class GetInvoiceByIdQueryHandler(IApplicationDbContext db)
             .Select(c => c.Name)
             .FirstAsync(cancellationToken);
 
-        return invoice.ToDto(customerName);
+        return invoice.ToDto(customerName, clock.Today());
     }
 }

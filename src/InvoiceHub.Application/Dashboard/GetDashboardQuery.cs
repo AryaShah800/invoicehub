@@ -24,13 +24,13 @@ public sealed record DashboardSummary(
 /// </summary>
 public sealed record GetDashboardQuery(int Months = 12) : IRequest<DashboardSummary>;
 
-public sealed class GetDashboardQueryHandler(IApplicationDbContext db, TimeProvider clock)
+public sealed class GetDashboardQueryHandler(IApplicationDbContext db, IBusinessClock clock)
     : IRequestHandler<GetDashboardQuery, DashboardSummary>
 {
     public async Task<DashboardSummary> Handle(GetDashboardQuery request, CancellationToken cancellationToken)
     {
         var months = Math.Clamp(request.Months, 1, 36);
-        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var today = clock.Today();
         var first = new DateOnly(today.Year, today.Month, 1).AddMonths(-(months - 1));
 
         // Tenant query filter applies. Totals are sums over lines, so read only the numbers each line needs
