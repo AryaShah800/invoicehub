@@ -72,6 +72,29 @@ public sealed class SharedComponentTests : UiTestBase
     }
 
     [Fact]
+    public void A_toast_dismisses_itself_after_its_lifetime()
+    {
+        var cut = RenderComponent<Toasts>(p => p.Add(c => c.Lifetime, TimeSpan.FromMilliseconds(50)));
+        Toasts.Show("Saved", "Draft saved");
+        cut.WaitForAssertion(() => Assert.Contains("Saved", cut.Markup));
+
+        cut.WaitForAssertion(() => Assert.Empty(Toasts.Toasts), TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
+    public async Task Leaving_the_page_cancels_pending_dismiss_timers()
+    {
+        var cut = RenderComponent<Toasts>(p => p.Add(c => c.Lifetime, TimeSpan.FromMilliseconds(100)));
+        Toasts.Show("Saved", "Draft saved");
+
+        DisposeComponents(); // the component is gone, e.g. the circuit closed
+        await Task.Delay(300);
+
+        // The timer was cancelled with the component: nothing ran against the disposed renderer.
+        Assert.Single(Toasts.Toasts);
+    }
+
+    [Fact]
     public void A_paid_event_raises_a_success_toast_and_a_part_payment_an_info_toast()
     {
         var events = Services.GetRequiredService<InvoiceEvents>();
