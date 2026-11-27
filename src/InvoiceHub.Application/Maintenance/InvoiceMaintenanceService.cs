@@ -39,12 +39,15 @@ public sealed class InvoiceMaintenanceService(
     public async Task<int> MarkOverdueAsync(DateOnly today, CancellationToken ct)
     {
         var total = 0;
+        // Invoices someone else changed while we worked. They are left for the next run (which re-reads them),
+        // and excluded here so a row that keeps changing cannot make this loop run forever.
+        var skipped = new HashSet<Guid>();
         while (true)
         {
             var batch = await db.Invoices
                 .Include(i => i.Lines)
                 .Where(i => (i.Status == InvoiceStatus.Issued || i.Status == InvoiceStatus.PartiallyPaid)
-                            && i.DueDate < today && i.OverdueMarkedOn == null)
+                            && i.DueDate < today && i.OverdueMarkedOn == null && !skipped.Contains(i.Id))
                 .OrderBy(i => i.DueDate).ThenBy(i => i.InvoiceNumber)
                 .Take(BatchSize)
                 .ToListAsync(ct);
@@ -55,7 +58,7 @@ public sealed class InvoiceMaintenanceService(
             var names = await db.Customers.Where(c => customerIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id, c => c.Name, ct);
 
             var marked = batch.Where(i => i.MarkOverdue(today)).ToList();
-            await db.SaveChangesAsync(ct);
+            await SaveSkippingConflictsAsync(marked, skipped, ct);
             total += marked.Count;
 
             foreach (var invoice in marked)
@@ -65,6 +68,36 @@ public sealed class InvoiceMaintenanceService(
             }
             if (batch.Count < BatchSize)
                 return total;
+        }
+    }
+
+    /// <summary>
+    /// Saves the batch. If a payment or an edit changed some of these invoices since we read them, only those rows
+    /// fail their RowVersion check: reload them (dropping our change), remember them as skipped and save the rest,
+    /// instead of letting one conflict throw away the whole batch. Each retry drops at least one row, so it ends.
+    /// </summary>
+    private async Task SaveSkippingConflictsAsync(List<Invoice> marked, HashSet<Guid> skipped, CancellationToken ct)
+    {
+        while (true)
+        {
+            try
+            {
+                await db.SaveChangesAsync(ct);
+                return;
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                foreach (var entry in ex.Entries)
+                {
+                    if (entry.Entity is Invoice invoice)
+                    {
+                        skipped.Add(invoice.Id);
+                        marked.Remove(invoice);
+                    }
+                    await entry.ReloadAsync(ct);
+                }
+                logger.LogInformation("Overdue run skipped {Count} invoice(s) changed by another request", ex.Entries.Count);
+            }
         }
     }
 

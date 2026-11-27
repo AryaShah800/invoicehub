@@ -2,14 +2,20 @@ using InvoiceHub.Application.Common;
 using InvoiceHub.Application.Dashboard;
 using InvoiceHub.Application.Invoices.Queries.GetInvoiceById;
 using InvoiceHub.Application.Invoices.Queries.ListInvoices;
+using InvoiceHub.Application.Maintenance;
 using InvoiceHub.Application.Reports;
 using InvoiceHub.Domain.Customers;
 using InvoiceHub.Domain.Invoices;
 using InvoiceHub.Domain.Products;
 using InvoiceHub.Domain.Tenants;
+using InvoiceHub.Infrastructure.Persistence;
+using InvoiceHub.Infrastructure.Persistence.Interceptors;
 using InvoiceHub.Infrastructure.Reports;
+using InvoiceHub.IntegrationTests.Api;
 using InvoiceHub.IntegrationTests.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 
@@ -170,6 +176,56 @@ public sealed class SqliteProviderTests : IDisposable
 
         b.SetNotes("edited by second");
         Assert.Throws<DbUpdateConcurrencyException>(() => second.SaveChanges());
+    }
+
+    [Fact]
+    public async Task Overdue_run_skips_an_invoice_changed_mid_run_and_marks_the_rest()
+    {
+        var (tenant, customer, _, _, p18) = SeedCatalogue();
+        AddInvoice(tenant, customer, "INV-1", new DateOnly(2026, 5, 1), true, (p18, 1m));
+        AddInvoice(tenant, customer, "INV-2", new DateOnly(2026, 5, 2), true, (p18, 1m));
+        var scope = new FakeTenantProvider { TenantId = tenant.Id };
+
+        // Just before the job saves, a payment for INV-1 arrives, so its RowVersion no longer matches.
+        var interruption = new EditBeforeFirstSave(() =>
+        {
+            using var other = _db.CreateContext(scope);
+            var paid = other.Invoices.Include(i => i.Lines).Single(i => i.InvoiceNumber == "INV-1");
+            other.Payments.Add(paid.RecordPayment("evt-mid-run", 100m, null, DateTime.UtcNow));
+            other.SaveChanges();
+        });
+        var builder = new DbContextOptionsBuilder<InvoiceHubDbContext>();
+        DatabaseProviderConfiguration.Configure(builder, DatabaseProvider.Sqlite, _db.ConnectionString,
+            new TenantWriteGuardInterceptor(scope), new AuditInterceptor(TimeProvider.System));
+        builder.AddInterceptors(interruption);
+        using var db = new InvoiceHubDbContext(builder.Options, scope);
+        var service = new InvoiceMaintenanceService(db, scope, new RecordingNotifier(),
+            NullLogger<InvoiceMaintenanceService>.Instance);
+
+        var marked = await service.MarkOverdueAsync(new DateOnly(2026, 6, 1), CancellationToken.None);
+
+        Assert.Equal(1, marked);
+        using var check = _db.CreateContext(scope);
+        var invoices = check.Invoices.OrderBy(i => i.InvoiceNumber).ToList();
+        Assert.Null(invoices[0].OverdueMarkedOn);
+        Assert.Equal(100m, invoices[0].AmountPaid);
+        Assert.NotNull(invoices[1].OverdueMarkedOn);
+    }
+
+    private sealed class EditBeforeFirstSave(Action edit) : SaveChangesInterceptor
+    {
+        private bool _done;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (!_done)
+            {
+                _done = true;
+                edit();
+            }
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 
     [Fact]
