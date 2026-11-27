@@ -217,6 +217,31 @@ public sealed class InvoiceListPageTests : UiTestBase
         RenderComponent<Invoices>().WaitForAssertion(() =>
             Api.Verify(a => a.ListInvoicesAsync(It.Is<InvoiceFilter>(f => f.Status == "Draft"), It.IsAny<CancellationToken>()), Times.Once));
     }
+
+    [Fact]
+    public void Following_a_link_to_the_list_while_on_it_replaces_the_filter()
+    {
+        Api.Setup(a => a.ListInvoicesAsync(It.IsAny<InvoiceFilter>(), It.IsAny<CancellationToken>())).ReturnsAsync(Page());
+        var nav = Services.GetRequiredService<FakeNavigationManager>();
+        nav.NavigateTo("/invoices?status=Draft");
+        var cut = RenderComponent<Invoices>();
+        cut.WaitForAssertion(() =>
+            Api.Verify(a => a.ListInvoicesAsync(It.Is<InvoiceFilter>(f => f.Status == "Draft"), It.IsAny<CancellationToken>()), Times.Once));
+
+        nav.NavigateTo("/invoices?overdue=true");
+        cut.WaitForAssertion(() =>
+            Api.Verify(a => a.ListInvoicesAsync(It.Is<InvoiceFilter>(f => f.Status == null && f.OverdueOnly), It.IsAny<CancellationToken>()), Times.Once));
+        Assert.Equal("", cut.Find("#f-status").GetAttribute("value") ?? "");
+
+        // The nav menu's plain /invoices link clears the filter.
+        nav.NavigateTo("/invoices");
+        cut.WaitForAssertion(() =>
+            Api.Verify(a => a.ListInvoicesAsync(It.Is<InvoiceFilter>(f => f.Status == null && !f.OverdueOnly), It.IsAny<CancellationToken>()), Times.Once));
+
+        // Leaving the page does not reload the list.
+        nav.NavigateTo("/customers");
+        Api.Verify(a => a.ListInvoicesAsync(It.IsAny<InvoiceFilter>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
+    }
 }
 
 public sealed class InvoiceDetailPageTests : UiTestBase
