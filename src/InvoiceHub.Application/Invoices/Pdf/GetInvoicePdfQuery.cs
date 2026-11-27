@@ -35,7 +35,17 @@ public sealed class GetInvoicePdfQueryHandler(IApplicationDbContext db, ITenantP
         var model = new InvoicePdfModel(invoice.ToDto(customer.Name, clock.Today()), seller.Name, seller.Gstin,
             customer.Gstin ?? "Unregistered", addressText, customer.StateCode);
 
-        var safeNumber = string.Concat(invoice.InvoiceNumber.Where(c => char.IsLetterOrDigit(c) || c == '-' || c == '_'));
-        return new InvoicePdf($"invoice-{safeNumber}.pdf", renderer.Render(model));
+        return new InvoicePdf(FileNameFor(invoice.InvoiceNumber, invoice.Id), renderer.Render(model));
+    }
+
+    /// <summary>
+    /// A download name that is safe in every browser and file system: ASCII letters, digits, '-' and '_' only.
+    /// A number made only of other characters (e.g. "///" or Devanagari digits) falls back to the invoice id,
+    /// instead of producing "invoice-.pdf" for every such invoice.
+    /// </summary>
+    public static string FileNameFor(string invoiceNumber, Guid invoiceId)
+    {
+        var safe = string.Concat(invoiceNumber.Where(c => char.IsAsciiLetterOrDigit(c) || c == '-' || c == '_'));
+        return $"invoice-{(safe.Length > 0 ? safe : invoiceId.ToString("N")[..8])}.pdf";
     }
 }
