@@ -72,12 +72,25 @@ public sealed class AuthService(
         }
     }
 
+    private static readonly ApplicationUser TimingDummy = new();
+
+    // A real hash from the configured hasher (same algorithm and iteration count as stored passwords),
+    // made once per process; AuthService itself is created per request.
+    private static string? s_dummyPasswordHash;
+    private string DummyPasswordHash =>
+        s_dummyPasswordHash ??= users.PasswordHasher.HashPassword(TimingDummy, Guid.NewGuid().ToString("N"));
+
     public async Task<AuthResult<AuthResponse>> LoginAsync(LoginRequest request, CancellationToken ct)
     {
         var email = NormalizeEmail(request.Email);
         var user = email is null ? null : await users.FindByEmailAsync(email);
         if (user is null || string.IsNullOrEmpty(request.Password))
+        {
+            // Spend the same password-hashing time as a wrong password for a real account, so the response
+            // time does not reveal which emails are registered.
+            users.PasswordHasher.VerifyHashedPassword(TimingDummy, DummyPasswordHash, request.Password ?? "");
             return AuthResult<AuthResponse>.Fail(AuthFailure.InvalidCredentials, InvalidCredentialsMessage);
+        }
 
         if (await users.IsLockedOutAsync(user))
             return AuthResult<AuthResponse>.Fail(AuthFailure.LockedOut, "Too many failed attempts. Try again later.");
