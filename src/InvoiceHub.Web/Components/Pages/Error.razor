@@ -1,0 +1,26 @@
+@page "/Error"
+@layout LoginLayout
+@using System.Diagnostics
+
+@* UseExceptionHandler("/Error") re-executes here after an unhandled exception. This page used to be missing,
+   so users got a bare 404. It shows a reference id for the logs and never any exception details. *@
+
+<PageTitle>Something went wrong - InvoiceHub</PageTitle>
+
+<section class="login">
+    <div class="login-card" role="alert">
+        <h1>Something went wrong</h1>
+        <p class="muted">The page could not be shown. Your data has not been changed. Please go back and try again.</p>
+        @if (!string.IsNullOrEmpty(RequestId))
+        {
+            <p class="muted small">Reference: <code>@RequestId</code></p>
+        }
+        <p><a class="btn" href="/">Back to the dashboard</a></p>
+    </div>
+</section>
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId => Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}
