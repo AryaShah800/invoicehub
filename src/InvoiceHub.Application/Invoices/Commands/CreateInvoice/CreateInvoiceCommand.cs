@@ -29,7 +29,7 @@ public sealed record CreateInvoiceCommand(
     string? Notes,
     IReadOnlyList<CreateInvoiceLine> Lines) : IRequest<InvoiceDto>;
 
-public sealed class CreateInvoiceCommandHandler(IApplicationDbContext db, ITenantProvider tenantProvider)
+public sealed class CreateInvoiceCommandHandler(IApplicationDbContext db, ITenantProvider tenantProvider, IBusinessClock clock)
     : IRequestHandler<CreateInvoiceCommand, InvoiceDto>
 {
     public async Task<InvoiceDto> Handle(CreateInvoiceCommand request, CancellationToken cancellationToken)
@@ -74,6 +74,6 @@ public sealed class CreateInvoiceCommandHandler(IApplicationDbContext db, ITenan
         db.Invoices.Add(invoice);
         await db.SaveChangesAsync(cancellationToken);
 
-        return invoice.ToDto(customer.Name);
+        return invoice.ToDto(customer.Name, clock.Today());
     }
 }

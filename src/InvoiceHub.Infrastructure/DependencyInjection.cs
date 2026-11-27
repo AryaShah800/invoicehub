@@ -1,3 +1,4 @@
+using InvoiceHub.Application;
 using InvoiceHub.Application.Abstractions;
 using InvoiceHub.Application.Auth;
 using InvoiceHub.Application.Reports;
@@ -19,7 +20,7 @@ public static class DependencyInjection
         var provider = DatabaseProviderConfiguration.Read(configuration);
         var connectionString = DatabaseProviderConfiguration.ReadConnectionString(configuration, provider);
 
-        services.AddSingleton(TimeProvider.System);
+        services.AddBusinessClock(configuration);
         services.AddScoped<AuditInterceptor>();
         services.AddScoped<TenantWriteGuardInterceptor>();
 

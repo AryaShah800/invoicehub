@@ -23,7 +23,7 @@
         var inv = _invoice;
         <header class="page-head">
             <div>
-                <h1><span class="serial">@inv.InvoiceNumber</span> <StatusBadge Status="@inv.Status" IsOverdue="@IsOverdue" /></h1>
+                <h1><span class="serial">@inv.InvoiceNumber</span> <StatusBadge Status="@inv.Status" IsOverdue="@inv.IsOverdue" /></h1>
                 <p class="muted">@inv.CustomerName. Issued @Money.Date(inv.IssueDate), due @Money.Date(inv.DueDate).</p>
             </div>
             <div class="actions">
@@ -101,8 +101,6 @@
     private InvoiceDto? _invoice;
     private string? _error;
     private bool _busy;
-
-    private bool IsOverdue => _invoice is { Status: "Issued" or "PartiallyPaid" } inv && inv.DueDate < DateOnly.FromDateTime(DateTime.UtcNow);
 
     protected override async Task OnInitializedAsync()
     {

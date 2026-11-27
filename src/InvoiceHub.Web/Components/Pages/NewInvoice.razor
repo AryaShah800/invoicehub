@@ -1,6 +1,7 @@
 @page "/invoices/new"
 @inject IInvoiceApi Api
 @inject NavigationManager Nav
+@inject InvoiceHub.Application.Abstractions.IBusinessClock Clock
 @using InvoiceHub.Application.Customers
 @using InvoiceHub.Application.Products
 
@@ -109,7 +110,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var today = DateOnly.FromDateTime(DateTime.Today);
+        var today = Clock.Today();
         _form.IssueDate = today;
         _form.DueDate = today.AddDays(15);
         _form.InvoiceNumber = $"INV-{today:yyMMdd}-{Random.Shared.Next(100, 999)}";

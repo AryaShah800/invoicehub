@@ -36,11 +36,12 @@ public sealed record InvoiceDto(
     decimal TaxTotal,
     decimal GrandTotal,
     decimal AmountPaid,
-    decimal BalanceDue);
+    decimal BalanceDue,
+    bool IsOverdue);
 
 internal static class InvoiceMapping
 {
-    public static InvoiceDto ToDto(this Invoice invoice, string customerName) => new(
+    public static InvoiceDto ToDto(this Invoice invoice, string customerName, DateOnly today) => new(
         invoice.Id,
         invoice.InvoiceNumber,
         invoice.Status.ToString(),
@@ -66,5 +67,6 @@ internal static class InvoiceMapping
         invoice.TaxTotal,
         invoice.GrandTotal,
         invoice.AmountPaid,
-        invoice.BalanceDue);
+        invoice.BalanceDue,
+        (invoice.Status == InvoiceStatus.Issued || invoice.Status == InvoiceStatus.PartiallyPaid) && invoice.DueDate < today);
 }

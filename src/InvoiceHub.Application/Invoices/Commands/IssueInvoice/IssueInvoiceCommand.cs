@@ -15,7 +15,7 @@ public sealed class IssueInvoiceCommandValidator : AbstractValidator<IssueInvoic
     public IssueInvoiceCommandValidator() => RuleFor(c => c.Id).NotEmpty();
 }
 
-public sealed class IssueInvoiceCommandHandler(IApplicationDbContext db)
+public sealed class IssueInvoiceCommandHandler(IApplicationDbContext db, IBusinessClock clock)
     : IRequestHandler<IssueInvoiceCommand, InvoiceDto>
 {
     public async Task<InvoiceDto> Handle(IssueInvoiceCommand request, CancellationToken cancellationToken)
@@ -35,6 +35,6 @@ public sealed class IssueInvoiceCommandHandler(IApplicationDbContext db)
             .Select(c => c.Name)
             .FirstAsync(cancellationToken);
 
-        return invoice.ToDto(customerName);
+        return invoice.ToDto(customerName, clock.Today());
     }
 }

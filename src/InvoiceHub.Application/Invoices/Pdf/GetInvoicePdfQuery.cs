@@ -11,7 +11,7 @@ public sealed record InvoicePdf(string FileName, byte[] Content);
 
 public sealed record GetInvoicePdfQuery(Guid Id) : IRequest<InvoicePdf>;
 
-public sealed class GetInvoicePdfQueryHandler(IApplicationDbContext db, ITenantProvider tenantProvider, IInvoicePdfRenderer renderer)
+public sealed class GetInvoicePdfQueryHandler(IApplicationDbContext db, ITenantProvider tenantProvider, IInvoicePdfRenderer renderer, IBusinessClock clock)
     : IRequestHandler<GetInvoicePdfQuery, InvoicePdf>
 {
     public async Task<InvoicePdf> Handle(GetInvoicePdfQuery request, CancellationToken cancellationToken)
@@ -32,7 +32,7 @@ public sealed class GetInvoicePdfQueryHandler(IApplicationDbContext db, ITenantP
         var addressText = string.Join(", ", new[] { address.Line1, address.Line2, address.City, address.PostalCode }
             .Where(part => !string.IsNullOrWhiteSpace(part)));
 
-        var model = new InvoicePdfModel(invoice.ToDto(customer.Name), seller.Name, seller.Gstin,
+        var model = new InvoicePdfModel(invoice.ToDto(customer.Name, clock.Today()), seller.Name, seller.Gstin,
             customer.Gstin ?? "Unregistered", addressText, customer.StateCode);
 
         var safeNumber = string.Concat(invoice.InvoiceNumber.Where(c => char.IsLetterOrDigit(c) || c == '-' || c == '_'));

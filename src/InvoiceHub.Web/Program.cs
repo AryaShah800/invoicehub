@@ -1,9 +1,11 @@
+using InvoiceHub.Application;
 using InvoiceHub.Web.Components;
 using InvoiceHub.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.AddBusinessClock(builder.Configuration);
 
 var apiBase = builder.Configuration["Api:BaseUrl"] ?? "http://localhost:5080";
 builder.Services.AddSingleton(new ApiEndpoint(new Uri(apiBase)));

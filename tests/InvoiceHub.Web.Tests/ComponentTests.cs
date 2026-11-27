@@ -223,6 +223,19 @@ public sealed class InvoiceDetailPageTests : UiTestBase
 {
     private readonly Guid _id = Guid.NewGuid();
 
+    [Theory]
+    [InlineData(true, 2099)]
+    [InlineData(false, 2000)]
+    public void Overdue_badge_uses_the_API_flag(bool overdue, int dueYear)
+    {
+        Api.Setup(a => a.GetInvoiceAsync(_id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Invoice(_id, "Issued") with { IsOverdue = overdue, DueDate = new DateOnly(dueYear, 1, 1) });
+
+        var cut = RenderComponent<InvoiceDetail>(p => p.Add(c => c.Id, _id));
+
+        cut.WaitForAssertion(() => Assert.Equal(overdue ? "Overdue" : "Issued", cut.Find("h1 .badge").TextContent));
+    }
+
     [Fact]
     public void A_draft_can_be_issued()
     {
@@ -302,6 +315,16 @@ public sealed class NewInvoicePageTests : UiTestBase
             .ReturnsAsync([new CustomerDto(CustomerId, "Acme Pvt Ltd", "a@b.test", null, "27", "1 Road", null, "Pune", "411001")]);
         Api.Setup(a => a.ListActiveProductsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([new ProductDto(ProductId, "Widget", "8471", 1000m, 18m, true)]);
+    }
+
+    [Fact]
+    public void Default_dates_and_invoice_number_use_the_business_date()
+    {
+        var cut = RenderComponent<NewInvoice>();
+
+        cut.WaitForAssertion(() => Assert.Equal("2026-11-27", cut.Find("#issue").GetAttribute("value")));
+        Assert.Equal("2026-12-12", cut.Find("#due").GetAttribute("value"));
+        Assert.StartsWith("INV-261127-", cut.Find("#number").GetAttribute("value"));
     }
 
     [Fact]

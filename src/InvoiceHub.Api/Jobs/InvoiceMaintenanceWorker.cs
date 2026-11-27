@@ -13,9 +13,6 @@ public sealed class BackgroundJobOptions
 
     /// <summary>How often the job wakes up. Running more often is harmless because every step is idempotent.</summary>
     public int IntervalMinutes { get; set; } = 60;
-
-    /// <summary>Business time zone as minutes ahead of UTC (330 = India Standard Time), used to decide what "today" is.</summary>
-    public int UtcOffsetMinutes { get; set; } = 330;
 }
 
 /// <summary>
@@ -27,6 +24,7 @@ public sealed class BackgroundJobOptions
 public sealed class InvoiceMaintenanceWorker(
     IServiceScopeFactory scopes,
     TimeProvider time,
+    IBusinessClock clock,
     IOptions<BackgroundJobOptions> options,
     ILogger<InvoiceMaintenanceWorker> logger) : BackgroundService
 {
@@ -62,8 +60,7 @@ public sealed class InvoiceMaintenanceWorker(
         }
     }
 
-    public DateOnly Today() =>
-        DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime.AddMinutes(options.Value.UtcOffsetMinutes));
+    public DateOnly Today() => clock.Today();
 
     /// <summary>One pass over every active tenant. Public so tests and tools can run it for a chosen date.</summary>
     public async Task<MaintenanceResult> RunOnceAsync(DateOnly today, CancellationToken ct)

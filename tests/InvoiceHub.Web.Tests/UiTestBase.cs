@@ -1,4 +1,5 @@
 using Bunit;
+using InvoiceHub.Application.Abstractions;
 using InvoiceHub.Application.Common;
 using InvoiceHub.Application.Customers;
 using InvoiceHub.Application.Dashboard;
@@ -19,12 +20,15 @@ public abstract class UiTestBase : TestContext
     protected Mock<IInvoiceApi> Api { get; } = new();
 
     protected ToastService Toasts { get; } = new();
+    protected Mock<IBusinessClock> Clock { get; } = new();
 
     protected UiTestBase()
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
         var session = new AuthSession(new ProtectedSessionStorage(JSInterop.JSRuntime, new EphemeralDataProtectionProvider()));
         Services.AddSingleton(Api.Object);
+        Clock.Setup(c => c.Today()).Returns(new DateOnly(2026, 11, 27));
+        Services.AddSingleton(Clock.Object);
         Services.AddSingleton(session);
         Services.AddSingleton(Toasts);
         Services.AddSingleton(new ApiEndpoint(new Uri("http://api.test")));
@@ -42,7 +46,7 @@ public abstract class UiTestBase : TestContext
         id, "INV-100", status, new DateOnly(2026, 11, 1), new DateOnly(2099, 1, 1), Guid.NewGuid(), "Acme Pvt Ltd", "27",
         intraState ? "27" : "29", intraState, "Thanks",
         [new InvoiceLineDto(Guid.NewGuid(), 1, null, "Laptop stand", "8473", 2m, 1000m, 18m, 2000m, intraState ? 180m : 0m, intraState ? 180m : 0m, intraState ? 0m : 360m)],
-        2000m, intraState ? 180m : 0m, intraState ? 180m : 0m, intraState ? 0m : 360m, 360m, 2360m, 0m, 2360m);
+        2000m, intraState ? 180m : 0m, intraState ? 180m : 0m, intraState ? 0m : 360m, 360m, 2360m, 0m, 2360m, false);
 
     protected static DashboardSummary Dashboard(int overdueCount = 3) => new(
         Enumerable.Range(1, 12).Select(m => new MonthlyRevenue(2026, m, m % 3, m * 10000m, m * 1800m, m * 11800m)).ToList(),
