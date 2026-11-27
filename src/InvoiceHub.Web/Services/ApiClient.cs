@@ -83,11 +83,30 @@ public sealed class ApiClient(HttpClient http, AuthSession session) : IInvoiceAp
     public async Task<InvoiceDto> CreateInvoiceAsync(CreateInvoiceCommand command, CancellationToken ct = default) =>
         await ReadAsync<InvoiceDto>(await SendAsync(HttpMethod.Post, "/api/invoices", JsonContent.Create(command), ct), ct);
 
-    public async Task<IReadOnlyList<CustomerDto>> ListCustomersAsync(CancellationToken ct = default) =>
-        (await GetAsync<PagedResult<CustomerDto>>("/api/customers?pageSize=100", ct)).Items;
+    public Task<IReadOnlyList<CustomerDto>> ListCustomersAsync(CancellationToken ct = default) =>
+        GetAllPagesAsync<CustomerDto>("/api/customers?", ct);
 
-    public async Task<IReadOnlyList<ProductDto>> ListActiveProductsAsync(CancellationToken ct = default) =>
-        (await GetAsync<PagedResult<ProductDto>>("/api/products?isActive=true&pageSize=100", ct)).Items;
+    public Task<IReadOnlyList<ProductDto>> ListActiveProductsAsync(CancellationToken ct = default) =>
+        GetAllPagesAsync<ProductDto>("/api/products?isActive=true&", ct);
+
+    /// <summary>Dropdowns need every item, but the API pages at most 100 at a time.</summary>
+    public const int MaxDropdownPages = 20;
+
+    /// <summary>
+    /// Reads every page of a list (up to MaxDropdownPages x 100 items). One page used to be read, so the 101st
+    /// customer or product silently never appeared in the new-invoice dropdowns.
+    /// </summary>
+    private async Task<IReadOnlyList<T>> GetAllPagesAsync<T>(string urlWithQuery, CancellationToken ct)
+    {
+        var items = new List<T>();
+        for (var page = 1; page <= MaxDropdownPages; page++)
+        {
+            var result = await GetAsync<PagedResult<T>>($"{urlWithQuery}page={page}&pageSize={PagedResult<T>.MaxPageSize}", ct);
+            items.AddRange(result.Items);
+            if (page >= result.TotalPages || result.Items.Count == 0) break;
+        }
+        return items;
+    }
 
     private async Task<T> GetAsync<T>(string url, CancellationToken ct) =>
         await ReadAsync<T>(await SendAsync(HttpMethod.Get, url, null, ct), ct);
