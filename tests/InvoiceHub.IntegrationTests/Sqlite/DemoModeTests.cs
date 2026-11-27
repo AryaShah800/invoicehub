@@ -135,4 +135,39 @@ public sealed class DemoModeTests(SqliteDemoApiFactory factory)
         var seeder = factory.Services.GetRequiredService<DemoDataSeeder>();
         Assert.False(await seeder.SeedIfEmptyAsync(CancellationToken.None));
     }
+
+    /// <summary>Counts password hash checks, to show an unknown email costs the same work as a wrong password.</summary>
+    private sealed class CountingHasher : Microsoft.AspNetCore.Identity.IPasswordHasher<InvoiceHub.Infrastructure.Identity.ApplicationUser>
+    {
+        private readonly Microsoft.AspNetCore.Identity.PasswordHasher<InvoiceHub.Infrastructure.Identity.ApplicationUser> _inner = new();
+        public int Verifications;
+
+        public string HashPassword(InvoiceHub.Infrastructure.Identity.ApplicationUser user, string password) => _inner.HashPassword(user, password);
+
+        public Microsoft.AspNetCore.Identity.PasswordVerificationResult VerifyHashedPassword(
+            InvoiceHub.Infrastructure.Identity.ApplicationUser user, string hashedPassword, string providedPassword)
+        {
+            Interlocked.Increment(ref Verifications);
+            return _inner.VerifyHashedPassword(user, hashedPassword, providedPassword);
+        }
+    }
+
+    [Fact]
+    public async Task An_unknown_email_is_checked_against_a_password_hash_like_a_known_one()
+    {
+        // Timing is too noisy to assert in CI, so count the hash checks instead. Uses this class's factory
+        // (one SqliteDemoApiFactory per test run: it sets process-wide settings).
+        var hasher = new CountingHasher();
+        using var app = factory.WithWebHostBuilder(b => Microsoft.AspNetCore.TestHost.WebHostBuilderExtensions.ConfigureTestServices(b,
+            s => s.AddSingleton<Microsoft.AspNetCore.Identity.IPasswordHasher<InvoiceHub.Infrastructure.Identity.ApplicationUser>>(hasher)));
+        var client = app.CreateClient();
+
+        var unknown = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("nobody-" + Guid.NewGuid() + "@example.test", "whatever-123"));
+        Assert.Equal(HttpStatusCode.Unauthorized, unknown.StatusCode);
+        Assert.Equal(1, hasher.Verifications);
+
+        var wrong = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(factory.Demo.Email, "wrong-password-timing"));
+        Assert.Equal(HttpStatusCode.Unauthorized, wrong.StatusCode);
+        Assert.Equal(2, hasher.Verifications);
+    }
 }
