@@ -8,6 +8,7 @@ using InvoiceHub.Web.Components.Pages;
 using InvoiceHub.Web.Components.Shared;
 using InvoiceHub.Web.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.JSInterop;
 using Moq;
 using System.Net;
 
@@ -301,6 +302,34 @@ public sealed class InvoiceDetailPageTests : UiTestBase
 
         pdf.VerifyInvoke("invoicehub.download");
         Assert.Equal("INV-100.pdf", pdf.Invocations.Single().Arguments[0]);
+    }
+
+    [Fact]
+    public void Issuing_while_the_api_is_down_shows_a_message_and_keeps_the_button()
+    {
+        Api.Setup(a => a.GetInvoiceAsync(_id, It.IsAny<CancellationToken>())).ReturnsAsync(Invoice(_id, "Draft"));
+        Api.Setup(a => a.IssueInvoiceAsync(_id, It.IsAny<CancellationToken>())).ThrowsAsync(new HttpRequestException("down"));
+        var cut = RenderComponent<InvoiceDetail>(p => p.Add(c => c.Id, _id));
+        cut.WaitForAssertion(() => cut.Find("#issue"));
+
+        cut.Find("#issue").Click();
+
+        cut.WaitForAssertion(() => Assert.Contains("not reachable", cut.Markup));
+        Assert.False(cut.Find("#issue").HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public void A_failed_browser_download_shows_a_message()
+    {
+        JSInterop.SetupVoid("invoicehub.download", _ => true).SetException(new JSException("blocked"));
+        Api.Setup(a => a.GetInvoiceAsync(_id, It.IsAny<CancellationToken>())).ReturnsAsync(Invoice(_id, "Issued"));
+        Api.Setup(a => a.GetInvoicePdfAsync(_id, It.IsAny<CancellationToken>())).ReturnsAsync("%PDF-1.7"u8.ToArray());
+        var cut = RenderComponent<InvoiceDetail>(p => p.Add(c => c.Id, _id));
+        cut.WaitForAssertion(() => cut.Find("#download-pdf"));
+
+        cut.Find("#download-pdf").Click();
+
+        cut.WaitForAssertion(() => Assert.Contains("could not save it", cut.Markup));
     }
 
     [Fact]
