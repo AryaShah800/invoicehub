@@ -70,6 +70,17 @@ public sealed class SharedComponentTests : UiTestBase
     }
 
     [Fact]
+    public void The_error_page_shows_a_friendly_message_and_no_details()
+    {
+        var cut = RenderComponent<Error>();
+
+        Assert.Contains("Something went wrong", cut.Markup);
+        Assert.NotNull(cut.Find("[role=alert]"));
+        Assert.Equal("/", cut.Find("a.btn").GetAttribute("href"));
+        Assert.DoesNotContain("Exception", cut.Markup);
+    }
+
+    [Fact]
     public void Toast_component_lists_toasts_and_dismisses_them()
     {
         var cut = RenderComponent<Toasts>();
