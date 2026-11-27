@@ -120,6 +120,7 @@
         _busy = true;
         try { _invoice = await Api.IssueInvoiceAsync(Id); _error = null; }
         catch (ApiException ex) { _error = ex.Message; }
+        catch (HttpRequestException) { _error = "The InvoiceHub API is not reachable."; }
         finally { _busy = false; }
     }
 
@@ -135,6 +136,9 @@
             _error = null;
         }
         catch (ApiException ex) { _error = ex.Message; }
+        catch (HttpRequestException) { _error = "The InvoiceHub API is not reachable."; }
+        // The browser side of the download failed (script blocked, tab closing): say so instead of breaking the page.
+        catch (JSException) { _error = "The PDF was created but the browser could not save it. Try again."; }
         finally { _busy = false; }
     }
 
